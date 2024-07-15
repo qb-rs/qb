@@ -1,0 +1,88 @@
+<mxfile host="Electron" modified="2024-07-13T15:20:16.165Z" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/24.5.3 Chrome/124.0.6367.207 Electron/30.0.6 Safari/537.36" etag="GPOfsLb9sIsbHYIlo9Y9" version="24.5.3" type="device">
+  <diagram name="Page-1" id="CglotCAr37x54kZqoKJ9">
+    <mxGraphModel dx="1414" dy="849" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="wL5co6ozMzgFDBXnowm6-8" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="80" width="380" height="360" as="geometry" />
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-1" value="QB Master Thread&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;handles communication between entities.&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="190" width="360" height="240" as="geometry" />
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-2" value="QBI Slave Thread 1&lt;br&gt;GDrive" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="51" y="90" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-3" value="QBI Slave Thread 2&lt;div&gt;Dropbox&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="170" y="90" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-4" value="QBI Slave Thread 3&lt;div&gt;Domain Socket&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="290" y="90" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-5" value="" style="endArrow=classic;startArrow=classic;html=1;rounded=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="110.86000000000001" y="190" as="sourcePoint" />
+            <mxPoint x="110.86000000000001" y="150" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-6" value="" style="endArrow=classic;startArrow=classic;html=1;rounded=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="235" y="190" as="sourcePoint" />
+            <mxPoint x="235" y="150" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-7" value="" style="endArrow=classic;startArrow=classic;html=1;rounded=0;" edge="1" parent="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="349.86" y="190" as="sourcePoint" />
+            <mxPoint x="349.86" y="150" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-9" value="QuixByte Daemon Process [trusted]" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="50" width="200" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-10" value="Master Unix Socket" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="520" width="380" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-11" value="" style="shape=flexArrow;endArrow=classic;startArrow=classic;html=1;rounded=0;exitX=0.5;exitY=0;exitDx=0;exitDy=0;" edge="1" parent="1" source="wL5co6ozMzgFDBXnowm6-10" target="wL5co6ozMzgFDBXnowm6-1">
+          <mxGeometry width="100" height="100" relative="1" as="geometry">
+            <mxPoint x="210" y="560" as="sourcePoint" />
+            <mxPoint x="310" y="460" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-12" value="Application Process&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;the frontend&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="640" width="380" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-13" value="" style="shape=flexArrow;endArrow=classic;startArrow=classic;html=1;rounded=0;" edge="1" parent="1">
+          <mxGeometry width="100" height="100" relative="1" as="geometry">
+            <mxPoint x="230" y="640" as="sourcePoint" />
+            <mxPoint x="229.66" y="560" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-15" value="Slave Unix Socket" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="520" y="100" width="280" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-16" value="" style="shape=flexArrow;endArrow=classic;startArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="wL5co6ozMzgFDBXnowm6-4" target="wL5co6ozMzgFDBXnowm6-15">
+          <mxGeometry width="100" height="100" relative="1" as="geometry">
+            <mxPoint x="490" y="210" as="sourcePoint" />
+            <mxPoint x="490" y="120" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-17" value="External Slave QBI Process&lt;div&gt;&lt;br&gt;&lt;/div&gt;&lt;div&gt;could be written in any language&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="520" y="360" width="280" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-20" value="start process with arguments" style="endArrow=classic;html=1;rounded=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" target="wL5co6ozMzgFDBXnowm6-17">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="420" y="680" as="sourcePoint" />
+            <mxPoint x="470" y="630" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="wL5co6ozMzgFDBXnowm6-21" value="" style="shape=flexArrow;endArrow=classic;startArrow=classic;html=1;rounded=0;exitX=0.5;exitY=0;exitDx=0;exitDy=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;" edge="1" parent="1" source="wL5co6ozMzgFDBXnowm6-17" target="wL5co6ozMzgFDBXnowm6-15">
+          <mxGeometry width="100" height="100" relative="1" as="geometry">
+            <mxPoint x="600" y="200" as="sourcePoint" />
+            <mxPoint x="710" y="200" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

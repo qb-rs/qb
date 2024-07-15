@@ -1,0 +1,127 @@
+<mxfile host="Electron" modified="2024-05-30T20:35:41.352Z" agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/24.4.0 Chrome/120.0.6099.109 Electron/28.1.0 Safari/537.36" etag="-v89K282oxBERCZz16vY" version="24.4.0" type="device">
+  <diagram name="Seite-1" id="IYYJT3ZzDAemhensDdL4">
+    <mxGraphModel dx="1613" dy="786" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-2" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="200" y="190" width="400" height="290" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-3" value="QBI Process" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="200" y="160" width="70" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-4" value="P2PQBI Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="470" y="410" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-5" value="TCPQBI Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="470" y="340" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-6" value="TCP&lt;span style=&quot;background-color: initial;&quot;&gt;QBI Thread&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="470" y="270" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-7" value="DropboxQBI Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="470" y="200" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-11" value="TCPQBI Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="410" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-12" value="TCPQBI Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="340" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-13" value="WebDAVQBI Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="270" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-14" value="GDriveQBI Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="340" y="200" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-16" value="QBI Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="210" y="200" width="120" height="270" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-18" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="190" width="140" height="290" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-19" value="Application Process" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="160" width="110" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-20" value="Main Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="200" width="120" height="270" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-29" value="Bridge" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="400" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-30" value="Bridge" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="220" y="400" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-32" value="" style="endArrow=classic;startArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="6B6yLCgwgDLZI9AooSqY-29" target="6B6yLCgwgDLZI9AooSqY-30">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="300" y="420" as="sourcePoint" />
+            <mxPoint x="350" y="370" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-33" value="UI/UX" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="210" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-34" value="&lt;h1 style=&quot;margin-top: 0px;&quot;&gt;QuixByte Application Stack&lt;/h1&gt;&lt;p&gt;This document describes the application layout of Applications using the Rust QuixByte library for storing and sharing files.&lt;/p&gt;" style="text;html=1;whiteSpace=wrap;overflow=hidden;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="40" width="360" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-35" value="" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="550" width="530" height="290" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-36" value="Application Process" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="520" width="110" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-37" value="P2PQBI Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="770" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-38" value="TCPQBI Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="700" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-39" value="TCP&lt;span style=&quot;background-color: initial;&quot;&gt;QBI Thread&lt;/span&gt;" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="630" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-40" value="DropboxQBI Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="440" y="560" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-41" value="TCPQBI Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="310" y="770" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-42" value="TCPQBI Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="310" y="700" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-43" value="WebDAVQBI Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="310" y="630" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-44" value="GDriveQBI Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="310" y="560" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-45" value="QB Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="180" y="560" width="120" height="270" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-48" value="Main Thread" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="50" y="560" width="120" height="270" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-52" value="UI/UX" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="570" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-53" value="Bridge" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="760" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-54" value="Bridge" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="190" y="760" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-55" value="" style="endArrow=classic;startArrow=classic;html=1;rounded=0;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="6B6yLCgwgDLZI9AooSqY-53" target="6B6yLCgwgDLZI9AooSqY-54">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="300" y="780" as="sourcePoint" />
+            <mxPoint x="350" y="730" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-60" value="2. In the same process" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="490" width="130" height="30" as="geometry" />
+        </mxCell>
+        <mxCell id="6B6yLCgwgDLZI9AooSqY-61" value="1. As a seperate process [deamonized]" style="text;html=1;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;" vertex="1" parent="1">
+          <mxGeometry x="40" y="130" width="210" height="30" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

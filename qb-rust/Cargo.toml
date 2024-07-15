@@ -1,0 +1,12 @@
+[package]
+name = "qb-rust"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tokio = { version = "1.37.0", features = ["rt", "sync"] }
+# qbi-rtc = { path = "../qbi-rtc" }
+qbi-local = { path = "../qbi-local" }
+qb = { path = "../qb" }
+tracing-subscriber = "0.3.18"
+tracing-panic = "0.1.2"

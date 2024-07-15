@@ -1,0 +1,10 @@
+[package]
+name = "qbi-gdrive"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+qb = { path = "../qb" }
+qb-derive = { path = "../qb-derive" }
+tokio = { version = "1.37.0", features = ["rt", "sync"] }
+google-drive = "0.7.0"

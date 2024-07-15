@@ -1,0 +1,12 @@
+[package]
+name = "qbi-local"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+qb = { path = "../qb" }
+qb-derive = { path = "../qb-derive" }
+tokio = { version = "1.37.0", features = ["full"] }
+bitcode = "0.6.0"
+notify = "6.1.1"
+tracing = "0.1.40"
