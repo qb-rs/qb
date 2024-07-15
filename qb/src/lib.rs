@@ -12,11 +12,10 @@ pub mod change;
 pub mod changelog;
 pub mod diff;
 pub mod filetree;
-pub mod fswrapper;
+pub mod fs;
 pub mod hash;
 pub mod ignore;
 pub mod interface;
-pub mod path;
 pub mod protocol;
 pub mod resource;
 pub mod transaction;
@@ -26,46 +25,37 @@ pub use change::*;
 pub use changelog::*;
 pub use diff::*;
 pub use filetree::*;
-pub use fswrapper::*;
+pub use fs::*;
 pub use hash::*;
+pub use ignore::*;
 pub use interface::*;
-pub use path::*;
 pub use protocol::*;
 pub use resource::*;
 pub use transaction::*;
 
 struct QBIHandle {
+    id: QBID,
     join_handle: JoinHandle<()>,
     tx: mpsc::Sender<QBMessage>,
     rx: mpsc::Receiver<QBIMessage>,
-    common: QBHash,
     syncing: bool,
-    id: String,
     // bridge: Box<dyn Fn(String) -> Box<dyn Any + Sync + Send + 'static>>,
 }
 
 pub struct QB {
     handles: Vec<QBIHandle>,
     noop: Waker,
-    fswrapper: QBFSWrapper,
-    pub changelog: QBChangelog,
+    fs: QBFS,
 }
 
 impl QB {
     pub async fn init(root: impl AsRef<Path>) -> QB {
-        let mut fswrapper = QBFSWrapper::new(root);
-        fswrapper.init().await.unwrap();
-
-        let changelog = fswrapper
-            .load(qbpaths::INTERNAL_CHANGELOG.as_ref())
-            .await
-            .unwrap_or_else(|_| Default::default());
+        let fs = QBFS::init(root).await;
 
         QB {
             noop: waker_fn(|| {}),
             handles: Vec::new(),
-            fswrapper,
-            changelog,
+            fs,
         }
     }
 
@@ -83,19 +73,21 @@ impl QB {
         let mut broadcast = Vec::new();
         self.clean_handles();
         for handle in self.handles.iter_mut() {
-            let span = span!(Level::INFO, "qbi-process", id = handle.id);
+            let span = span!(Level::INFO, "qbi-process", id = handle.id.0);
             let _guard = span.enter();
 
+            let handle_common = self.fs.devices.get_common(&handle.id);
+
             // SYNCHRONIZE
-            if !handle.syncing && handle.common != self.changelog.head() {
+            if !handle.syncing && handle_common != &self.fs.changelog.head() {
                 info!("syncing");
-                let entries = self.changelog.after_cloned(&handle.common).unwrap();
+                let changes = self.fs.changelog.after_cloned(handle_common).unwrap();
                 handle.syncing = true;
                 handle
                     .tx
                     .send(QBMessage::Sync {
-                        common: handle.common.clone(),
-                        entries,
+                        common: handle_common.clone(),
+                        changes,
                     })
                     .await
                     .unwrap();
@@ -107,35 +99,21 @@ impl QB {
                 info!("recv: {}", msg);
 
                 match msg {
-                    QBIMessage::Sync { common, entries } => {
-                        assert!(handle.common == common);
+                    QBIMessage::Sync { common, changes } => {
+                        assert!(handle_common == &common);
 
-                        let local_entries = self.changelog.after(&common).unwrap();
+                        let local_entries = self.fs.changelog.after(&common).unwrap();
 
                         // Apply changes
-                        //if !entries.is_empty() || !self.syncing {
                         let (mut entries, changes) =
-                            QBChangelog::merge(local_entries.clone(), entries).unwrap();
-                        self.changelog.append(&mut entries);
-                        self.fswrapper.apply(&changes).await.unwrap();
+                            QBChangelog::merge(local_entries.clone(), changes).unwrap();
+                        self.fs.changelog.append(&mut entries);
+                        self.fs.apply_changes(&changes).await.unwrap();
+                        self.fs.save_changelog().await.unwrap();
 
-                        self.fswrapper
-                            .save(qbpaths::INTERNAL_CHANGELOG.as_ref(), &self.changelog)
-                            .await
-                            .unwrap();
-
-                        handle.common = self.changelog.head();
-                        self.fswrapper
-                            .save(
-                                qbpaths::INTERNAL_COMMON
-                                    .clone()
-                                    .sub(handle.id.as_str())
-                                    .unwrap(),
-                                &handle.common,
-                            )
-                            .await
-                            .unwrap();
-                        //}
+                        let new_common = self.fs.changelog.head();
+                        self.fs.devices.set_common(&handle.id, new_common);
+                        self.fs.save_devices().await.unwrap();
 
                         // Send sync to remote
                         if !handle.syncing {
@@ -143,28 +121,17 @@ impl QB {
                                 .tx
                                 .send(QBMessage::Sync {
                                     common,
-                                    entries: local_entries,
+                                    changes: local_entries,
                                 })
                                 .await
                                 .unwrap();
                         }
 
                         handle.syncing = false;
-
-                        // TODO: figure out what to do when sync errors arise
                     }
                     QBIMessage::Common { common } => {
-                        self.fswrapper
-                            .save(
-                                qbpaths::INTERNAL_COMMON
-                                    .clone()
-                                    .sub(handle.id.as_str())
-                                    .unwrap(),
-                                &common,
-                            )
-                            .await
-                            .unwrap();
-                        handle.common = common;
+                        self.fs.devices.set_common(&handle.id, common);
+                        self.fs.save_devices().await.unwrap();
                     }
                     QBIMessage::Broadcast { msg } => broadcast.push(msg),
                 }
@@ -182,9 +149,9 @@ impl QB {
         }
     }
 
-    pub async fn attach_qbi<C, F, T, K: Into<String>>(
+    pub async fn attach_qbi<C, F, T>(
         &mut self,
-        id: K,
+        id: impl Into<QBID>,
         init: F,
         // bridge: Box<dyn Fn(String) -> Box<dyn Any + Sync + Send + 'static>>,
         cx: C,
@@ -199,17 +166,11 @@ impl QB {
 
         // let some = tokio::sync::oneshot::channel::<Message>(); // could be used for file transfer
 
-        let common = self
-            .fswrapper
-            .load(qbpaths::INTERNAL_COMMON.clone().sub(id.as_str()).unwrap())
-            .await
-            .unwrap_or_else(|_| QB_ENTRY_BASE.hash().clone());
-
         self.handles.push(QBIHandle {
             syncing: false,
             id: id.clone(),
             join_handle: std::thread::spawn(move || {
-                let span = span!(Level::INFO, "qbi", "id" = id);
+                let span = span!(Level::INFO, "qbi", "id" = id.0);
                 let _guard = span.enter();
                 init(
                     cx,
@@ -222,15 +183,16 @@ impl QB {
             }),
             tx: main_tx,
             rx: main_rx,
-            common,
             // bridge,
         });
     }
 
     pub async fn sync(&mut self) {
         for handle in self.handles.iter_mut() {
-            let entries = self.changelog.after_cloned(&handle.common).unwrap();
-            if entries.is_empty() {
+            let handle_common = self.fs.devices.get_common(&handle.id);
+
+            let changes = self.fs.changelog.after_cloned(handle_common).unwrap();
+            if changes.is_empty() {
                 continue;
             }
 
@@ -238,8 +200,8 @@ impl QB {
             handle
                 .tx
                 .send(QBMessage::Sync {
-                    common: handle.common.clone(),
-                    entries,
+                    common: handle_common.clone(),
+                    changes,
                 })
                 .await
                 .unwrap();

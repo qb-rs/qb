@@ -8,8 +8,8 @@ use notify::{
     Event, EventKind, RecursiveMode, Watcher,
 };
 use qb::{
-    qbpaths, QBChange, QBChangeKind, QBChangelog, QBFSWrapper, QBFileDiff, QBHash,
-    QBICommunication, QBIMessage, QBMessage, QBTransaction, TreeDir, TreeFile, QB_ENTRY_BASE,
+    qbpaths, QBChange, QBChangeKind, QBChangelog, QBFileDiff, QBICommunication, QBIMessage,
+    QBMessage, QBTransaction, QBFS, QBID_DEFAULT,
 };
 use qb_derive::QBIAsync;
 use tracing::{debug, info};
@@ -22,32 +22,19 @@ pub struct QBILocalInit {
 #[context(QBILocalInit)]
 pub struct QBILocal {
     com: QBICommunication,
-    changelog: QBChangelog,
+    fs: QBFS,
     transaction: QBTransaction,
-    fswrapper: QBFSWrapper,
-    common: QBHash,
     syncing: bool,
     watcher_skip: Vec<PathBuf>,
 }
 
 impl QBILocal {
     async fn init_async(cx: QBILocalInit, com: QBICommunication) -> Self {
-        let mut fswrapper = QBFSWrapper::new(cx.path);
-        fswrapper.init().await.unwrap();
-
-        let changelog = fswrapper
-            .load(qbpaths::INTERNAL_CHANGELOG.as_ref())
-            .await
-            .unwrap_or_else(|_| Default::default());
-
-        let common = fswrapper
-            .load(qbpaths::INTERNAL_COMMON.clone().sub("remote").unwrap())
-            .await
-            .unwrap_or_else(|_| QB_ENTRY_BASE.hash().clone());
+        let fs = QBFS::init(cx.path).await;
 
         com.tx
             .send(QBIMessage::Common {
-                common: common.clone(),
+                common: fs.devices.get_common(&QBID_DEFAULT).clone(),
             })
             .await
             .unwrap();
@@ -56,9 +43,7 @@ impl QBILocal {
             syncing: false,
             watcher_skip: Vec::new(),
             transaction: Default::default(),
-            fswrapper,
-            changelog,
-            common,
+            fs,
             com,
         }
     }
@@ -68,30 +53,32 @@ impl QBILocal {
 
         match msg {
             QBMessage::Common { common } => {
-                self.common = common;
+                self.fs.devices.set_common(&QBID_DEFAULT, common);
+                self.fs.save_devices().await.unwrap();
             }
-            QBMessage::Sync { common, entries } => {
-                assert!(self.common == common);
+            QBMessage::Sync { common, changes } => {
+                assert!(self.fs.devices.get_common(&QBID_DEFAULT).clone() == common);
 
-                let local_entries = self.changelog.after(&common).unwrap();
+                let local_entries = self.fs.changelog.after(&common).unwrap();
 
                 // Apply changes
-                //if !entries.is_empty() || !self.syncing {
-                let (entries, changes) =
-                    QBChangelog::merge(local_entries.clone(), entries).unwrap();
+                let (mut entries, changes) =
+                    QBChangelog::merge(local_entries.clone(), changes).unwrap();
                 self.watcher_skip.append(
                     &mut changes
                         .iter()
-                        .map(|e| self.fswrapper.fspath(&e.resource))
+                        .map(|e| self.fs.wrapper.fspath(&e.resource))
                         .collect(),
                 );
 
-                self.append(entries).await;
-                self.fswrapper.apply(&changes).await.unwrap();
-                // TODO: file tree
+                self.fs.changelog.append(&mut entries);
+                self.fs.save_changelog().await.unwrap();
 
-                self.common = self.changelog.head();
-                self.save_common().await;
+                self.fs.apply_changes(&changes).await.unwrap();
+
+                let new_common = self.fs.changelog.head();
+                self.fs.devices.set_common(&QBID_DEFAULT, new_common);
+                self.fs.save_devices().await.unwrap();
 
                 // Send sync to remote
                 if !self.syncing {
@@ -99,15 +86,13 @@ impl QBILocal {
                         .tx
                         .send(QBIMessage::Sync {
                             common,
-                            entries: local_entries,
+                            changes: local_entries,
                         })
                         .await
                         .unwrap();
                 }
 
                 self.syncing = false;
-
-                // TODO: figure out what to do when sync errors arise
             }
             QBMessage::Broadcast { msg } => println!("BROADCAST: {}", msg),
         }
@@ -117,7 +102,7 @@ impl QBILocal {
     async fn on_watcher(&mut self, event: Event) {
         debug!("event {:?}", event);
         for (i, fspath) in event.paths.iter().enumerate() {
-            let path = self.fswrapper.parse(fspath.to_str().unwrap()).unwrap();
+            let path = self.fs.wrapper.parse(fspath.to_str().unwrap()).unwrap();
 
             // skip internal files
             if qbpaths::INTERNAL.is_parent(&path) {
@@ -137,7 +122,7 @@ impl QBILocal {
 
             let entry = match event.kind {
                 EventKind::Access(AccessKind::Close(AccessMode::Write)) => {
-                    let kind = self.fswrapper.update(&path).await.unwrap();
+                    let kind = self.fs.diff(&path).await.unwrap();
                     match kind {
                         Some(QBFileDiff::Text(diff)) => {
                             QBChange::new(ts, QBChangeKind::Diff { diff }, path.file())
@@ -150,24 +135,21 @@ impl QBILocal {
                 }
                 EventKind::Modify(ModifyKind::Name(RenameMode::From))
                 | EventKind::Remove(RemoveKind::File) => {
-                    self.fswrapper.filetree.remove(&path);
                     QBChange::new(ts, QBChangeKind::Delete, path.file())
                 }
                 EventKind::Remove(RemoveKind::Folder) => {
-                    self.fswrapper.filetree.remove(&path);
                     QBChange::new(ts, QBChangeKind::Delete, path.dir())
                 }
                 EventKind::Create(CreateKind::File) => {
-                    self.fswrapper.filetree.insert(&path, TreeFile::default());
                     QBChange::new(ts, QBChangeKind::Create, path.file())
                 }
                 EventKind::Create(CreateKind::Folder) => {
-                    self.fswrapper.filetree.insert(&path, TreeDir::default());
                     QBChange::new(ts, QBChangeKind::Create, path.dir())
                 }
                 _ => continue,
             };
 
+            self.fs.notify_change(&entry);
             self.transaction.push(entry);
         }
     }
@@ -176,45 +158,23 @@ impl QBILocal {
         !self.syncing && !self.transaction.complete().is_empty()
     }
 
-    async fn append(&mut self, mut entries: Vec<QBChange>) {
-        self.changelog.append(&mut entries);
-        self.save_changelog().await;
-    }
-
-    /// Save common to fs
-    async fn save_common(&self) {
-        self.fswrapper
-            .save(
-                &qbpaths::INTERNAL_COMMON.clone().sub("remote").unwrap(),
-                &self.common,
-            )
-            .await
-            .unwrap();
-    }
-
-    /// Save the changelog to fs
-    async fn save_changelog(&self) {
-        self.fswrapper
-            .save(qbpaths::INTERNAL_CHANGELOG.as_ref(), &self.changelog)
-            .await
-            .unwrap();
-    }
-
     async fn sync(&mut self) {
         // TODO: minify entries vector
         info!("syncing");
         self.syncing = true;
 
         // Complete transaction
-        let mut entries = std::mem::take(&mut self.transaction).complete_into();
-        self.append(entries.clone()).await;
+        let mut changes = std::mem::take(&mut self.transaction).complete_into();
+        self.fs.changelog.append(&mut changes.clone());
+        self.fs.save_changelog().await.unwrap();
+        println!("NOTIFY");
 
         // notify remote
         self.com
             .tx
             .send(QBIMessage::Sync {
-                common: self.common.clone(),
-                entries: std::mem::take(&mut entries),
+                common: self.fs.devices.get_common(&QBID_DEFAULT).clone(),
+                changes: std::mem::take(&mut changes),
             })
             .await
             .unwrap();
@@ -231,7 +191,7 @@ impl QBILocal {
         // Add a path to be watched. All files and directories at that path and
         // below will be monitored for changes.
         watcher
-            .watch(&self.fswrapper.root, RecursiveMode::Recursive)
+            .watch(&self.fs.wrapper.root, RecursiveMode::Recursive)
             .unwrap();
 
         loop {

@@ -1,6 +1,9 @@
+// TODO: refactor this
+// TODO: merge into change.rs
+
 use std::{
     cmp::Ordering,
-    collections::{BTreeMap, HashSet},
+    collections::{HashMap, HashSet},
 };
 
 use bitcode::{Decode, Encode};
@@ -10,7 +13,7 @@ use crate::{qbpaths, QBChange, QBChangeKind, QBHash, QBResource};
 
 /// Only used internally for checking for merge conflicts.
 #[derive(Default, Debug)]
-struct QBChangeDiff(BTreeMap<QBResource, (bool, QBChange)>);
+struct QBChangeDiff(HashMap<QBResource, (bool, QBChange)>);
 
 impl QBChangeDiff {
     /// Tries to push a change onto this ChangeDiff.
@@ -128,6 +131,9 @@ impl QBChangelog {
         local: Vec<QBChange>,
         remote: Vec<QBChange>,
     ) -> Result<(Vec<QBChange>, Vec<QBChange>), String> {
+        // TODO: this returns only the last change for a specific entry
+        // TODO: fix this
+        // TODO: rewrite
         let mut local_iter = local.into_iter().peekable();
         let mut remote_iter = remote.into_iter().peekable();
 

@@ -60,7 +60,7 @@ pub enum QBIMessage {
     }, // When newest common entry gets updated
     Sync {
         common: QBHash,
-        entries: Vec<QBChange>,
+        changes: Vec<QBChange>,
     },
     // SyncComplete is the same as Sync with empty entries
     //SyncComplete {
@@ -74,7 +74,10 @@ pub enum QBIMessage {
 impl fmt::Display for QBIMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
-            QBIMessage::Sync { common, entries } => {
+            QBIMessage::Sync {
+                common,
+                changes: entries,
+            } => {
                 writeln!(f, "MSG_SYNC common: {}", common)?;
                 for entry in entries {
                     fmt::Display::fmt(entry, f)?;
@@ -106,7 +109,7 @@ pub enum QBMessage {
     }, // When newest common entry gets updated
     Sync {
         common: QBHash,
-        entries: Vec<QBChange>,
+        changes: Vec<QBChange>,
     },
     // SyncComplete is the same as Sync with empty entries
     //SyncComplete {
@@ -120,7 +123,10 @@ pub enum QBMessage {
 impl fmt::Display for QBMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
-            QBMessage::Sync { common, entries } => {
+            QBMessage::Sync {
+                common,
+                changes: entries,
+            } => {
                 writeln!(f, "MSG_SYNC common: {}", common)?;
                 for entry in entries {
                     fmt::Display::fmt(entry, f)?;

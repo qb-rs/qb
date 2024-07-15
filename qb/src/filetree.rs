@@ -1,28 +1,16 @@
+// TODO: merge into fs
+
 use core::{fmt, panic};
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{HashMap, HashSet},
     ops::{Index, IndexMut},
 };
 
 use bitcode::{Decode, Encode};
 use itertools::Itertools;
-use thiserror::Error;
 use tracing::warn;
 
 use crate::{qbpaths, resource::QBResource, QBChange, QBFSWrapper, QBHash, QBPath};
-
-#[derive(Error, Debug)]
-pub enum QBFileTreeError {
-    #[error("resource not found in file tree!")]
-    NotFound,
-}
-
-pub type QBFileTreeResult<T> = Result<T, QBFileTreeError>;
-
-#[derive(Encode, Decode)]
-pub struct QBFileTree {
-    arena: Vec<QBFileTreeNode>,
-}
 
 #[derive(Encode, Decode)]
 pub enum QBFileTreeNode {
@@ -41,7 +29,7 @@ impl Default for QBFileTreeNode {
 /// on the file system.
 #[derive(Encode, Decode, Default)]
 pub struct TreeDir {
-    pub contents: BTreeMap<String, usize>,
+    pub contents: HashMap<String, usize>,
 }
 
 impl TreeDir {
@@ -123,6 +111,11 @@ struct Compare {
     hash: QBHash,
 }
 
+#[derive(Encode, Decode)]
+pub struct QBFileTree {
+    pub(crate) arena: Vec<QBFileTreeNode>,
+}
+
 impl Default for QBFileTree {
     fn default() -> Self {
         Self {
@@ -151,7 +144,7 @@ impl<T: AsRef<QBPath>> IndexMut<T> for QBFileTree {
 
 impl fmt::Display for QBFileTree {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut stack = vec![(0, "/", 0)];
+        let mut stack = vec![(0, "", 0)];
 
         while let Some((ident, name, curr)) = stack.pop() {
             let prefix = match self.arena[curr] {
@@ -160,7 +153,7 @@ impl fmt::Display for QBFileTree {
                 QBFileTreeNode::Uninitialized => "init->",
             };
 
-            writeln!(f, "{} {}{}", "  ".repeat(ident), prefix, name)?;
+            writeln!(f, "{}{}{}", "    ".repeat(ident), prefix, name)?;
             if let QBFileTreeNode::Dir(dir) = &self.arena[curr] {
                 for (name, value) in dir.contents.iter() {
                     stack.push((ident + 1, name, *value));
@@ -173,10 +166,10 @@ impl fmt::Display for QBFileTree {
 }
 
 impl QBFileTree {
-    fn get_tree(&self, path: impl AsRef<QBPath>) -> BTreeSet<Compare> {
+    fn get_tree(&self, path: impl AsRef<QBPath>) -> HashSet<Compare> {
         let idx = match self.index(&path) {
             Some(idx) => idx,
-            None => return BTreeSet::new(),
+            None => return HashSet::new(),
         };
 
         self.arena[idx]
@@ -221,9 +214,10 @@ impl QBFileTree {
     }
 
     /// TODO: ignores
+    /// TODO: implement
     pub async fn walk(&self, fswrapper: &QBFSWrapper) -> Vec<QBChange> {
         let mut stack: Vec<QBPath> = vec![qbpaths::ROOT.clone()];
-        let mut changes = BTreeSet::new();
+        let mut changes = HashSet::new();
 
         while let Some(curr) = stack.pop() {
             if qbpaths::INTERNAL.is_parent(&curr) {
@@ -290,10 +284,6 @@ impl QBFileTree {
         let mut pointer = 0;
 
         for seg in path.as_ref().segments() {
-            if seg.is_empty() {
-                continue;
-            }
-
             match &self.arena[pointer] {
                 QBFileTreeNode::Dir(children) => {
                     pointer = children.get(seg)?;
@@ -336,7 +326,7 @@ impl QBFileTree {
                 QBFileTreeNode::File(_) => return None,
                 QBFileTreeNode::Uninitialized => {
                     let alloc = self.alloc();
-                    let mut contents = BTreeMap::new();
+                    let mut contents = HashMap::new();
                     contents.insert(seg.to_owned(), alloc);
                     self.arena[pointer] = QBFileTreeNode::Dir(TreeDir { contents });
                     alloc

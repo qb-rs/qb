@@ -1,11 +1,11 @@
-use std::collections::BTreeMap;
+use std::collections::HashMap;
 
 use crate::{QBChange, QBChangeKind, QBResource};
 
 /// A timesorted changemap
 #[derive(Default, Debug)]
 pub struct QBTransaction {
-    pub(crate) changes: BTreeMap<QBResource, Vec<QBChange>>,
+    pub(crate) changes: HashMap<QBResource, Vec<QBChange>>,
 }
 
 impl From<Vec<QBChange>> for QBTransaction {
@@ -14,8 +14,8 @@ impl From<Vec<QBChange>> for QBTransaction {
     }
 }
 
-impl From<BTreeMap<QBResource, Vec<QBChange>>> for QBTransaction {
-    fn from(value: BTreeMap<QBResource, Vec<QBChange>>) -> Self {
+impl From<HashMap<QBResource, Vec<QBChange>>> for QBTransaction {
+    fn from(value: HashMap<QBResource, Vec<QBChange>>) -> Self {
         Self::from_map(value)
     }
 }
@@ -26,8 +26,8 @@ impl Into<Vec<QBChange>> for QBTransaction {
     }
 }
 
-impl Into<BTreeMap<QBResource, Vec<QBChange>>> for QBTransaction {
-    fn into(self) -> BTreeMap<QBResource, Vec<QBChange>> {
+impl Into<HashMap<QBResource, Vec<QBChange>>> for QBTransaction {
+    fn into(self) -> HashMap<QBResource, Vec<QBChange>> {
         self.into_map()
     }
 }
@@ -51,7 +51,7 @@ impl QBTransaction {
     /// Convert a map into a transaction.
     ///
     /// This will sort the individual entries.
-    pub fn from_map(mut value: BTreeMap<QBResource, Vec<QBChange>>) -> Self {
+    pub fn from_map(mut value: HashMap<QBResource, Vec<QBChange>>) -> Self {
         for entries in value.values_mut() {
             Self::_sort(entries);
         }
@@ -63,12 +63,12 @@ impl QBTransaction {
     ///
     /// [!] This will not sort the individual entries
     /// and therefore requires sorted entries as input.
-    pub unsafe fn from_map_unchecked(value: BTreeMap<QBResource, Vec<QBChange>>) -> Self {
+    pub unsafe fn from_map_unchecked(value: HashMap<QBResource, Vec<QBChange>>) -> Self {
         Self { changes: value }
     }
 
     /// Convert a transaction into a map
-    pub fn into_map(self) -> BTreeMap<QBResource, Vec<QBChange>> {
+    pub fn into_map(self) -> HashMap<QBResource, Vec<QBChange>> {
         self.changes
     }
 
@@ -147,10 +147,10 @@ impl QBTransaction {
     }
 
     #[inline]
-    fn _group(value: Vec<QBChange>) -> BTreeMap<QBResource, Vec<QBChange>> {
+    fn _group(value: Vec<QBChange>) -> HashMap<QBResource, Vec<QBChange>> {
         value.into_iter().fold(
-            BTreeMap::new(),
-            |mut changes: BTreeMap<QBResource, Vec<QBChange>>, entry| {
+            HashMap::new(),
+            |mut changes: HashMap<QBResource, Vec<QBChange>>, entry| {
                 changes.entry(entry.resource).or_default();
                 changes
             },
