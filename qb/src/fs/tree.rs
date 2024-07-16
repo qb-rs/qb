@@ -65,14 +65,12 @@ impl Into<QBFileTreeNode> for TreeDir {
 #[derive(Encode, Decode)]
 pub struct TreeFile {
     pub hash: QBHash,
-    pub contents: String,
 }
 
 impl Default for TreeFile {
     fn default() -> Self {
         Self {
             hash: QBHash::compute(vec![]),
-            contents: Default::default(),
         }
     }
 }

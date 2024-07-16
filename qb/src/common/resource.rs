@@ -17,6 +17,7 @@ pub mod qbpaths {
         pub static ref INTERNAL: QBPath = unsafe { QBPath::new("/.qb") };
         pub static ref INTERNAL_CHANGELOG: QBPath = unsafe { QBPath::new("/.qb/changelog") };
         pub static ref INTERNAL_FILETREE: QBPath = unsafe { QBPath::new("/.qb/filetree") };
+        pub static ref INTERNAL_FILETABLE: QBPath = unsafe { QBPath::new("/.qb/filetable") };
         pub static ref INTERNAL_IGNORE: QBPath = unsafe { QBPath::new("/.qb/ignore") };
         pub static ref INTERNAL_DEVICES: QBPath = unsafe { QBPath::new("/.qb/devices") };
     }

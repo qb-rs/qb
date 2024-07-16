@@ -1,3 +1,4 @@
+pub mod table;
 pub mod tree;
 pub mod wrapper;
 
@@ -5,6 +6,8 @@ use std::{ffi::OsString, path::Path};
 
 use thiserror::Error;
 use tracing::warn;
+
+use table::QBFileTable;
 use tree::{QBFileTree, TreeDir, TreeFile};
 use wrapper::QBFSWrapper;
 
@@ -45,7 +48,8 @@ pub enum QBFileDiff {
 
 pub struct QBFS {
     pub wrapper: QBFSWrapper,
-    pub filetree: QBFileTree,
+    pub tree: QBFileTree,
+    pub table: QBFileTable,
     pub changelog: QBChangelog,
     pub devices: QBDevices,
     pub ignore_builder: QBIgnoreMapBuilder,
@@ -58,13 +62,16 @@ impl QBFS {
         let mut wrapper = QBFSWrapper::new(root);
         wrapper.init().await.unwrap();
 
-        let filetree = wrapper
+        let tree = wrapper
             .load_or_default::<QBFileTree>(qbpaths::INTERNAL_FILETREE.as_ref())
+            .await;
+        let table = wrapper
+            .load_or_default::<QBFileTable>(qbpaths::INTERNAL_FILETABLE.as_ref())
             .await;
         let ignore_builder = wrapper
             .load_or_default::<QBIgnoreMapBuilder>(qbpaths::INTERNAL_IGNORE.as_ref())
             .await;
-        let ignore = ignore_builder.build(&filetree);
+        let ignore = ignore_builder.build(&table);
         let devices = wrapper
             .load_or_default::<QBDevices>(qbpaths::INTERNAL_DEVICES.as_ref())
             .await;
@@ -74,7 +81,8 @@ impl QBFS {
 
         Self {
             wrapper,
-            filetree,
+            tree,
+            table,
             devices,
             changelog,
             ignore_builder,
@@ -92,29 +100,28 @@ impl QBFS {
                 // remove unnessecary clone
                 assert!(resource.is_file());
 
-                let file = self.filetree.get_mut(resource).unwrap().file_mut();
-                let old = std::mem::take(&mut file.contents);
+                let file = self.tree.get_mut(resource).unwrap().file_mut();
+                let old = self.table.remove(&file.hash);
                 let new = diff.apply(old);
                 file.hash = QBHash::compute(&new);
-                file.contents = new;
+                self.table.insert_hash(file.hash.clone(), new);
             }
             QBChangeKind::Change { contents } => {
                 assert!(resource.is_file());
 
-                let file = self.filetree.get_mut(resource).unwrap().file_mut();
+                let file = self.tree.get_mut(resource).unwrap().file_mut();
                 file.hash = QBHash::compute(&contents);
-                file.contents = Default::default();
             }
             QBChangeKind::Delete => {
-                self.filetree.remove(&resource);
+                self.tree.remove(&resource);
             }
             QBChangeKind::Create => {
                 match resource.is_dir() {
                     true => {
-                        self.filetree.insert(resource, TreeDir::default());
+                        self.tree.insert(resource, TreeDir::default());
                     }
                     false => {
-                        self.filetree.insert(resource, TreeFile::default());
+                        self.tree.insert(resource, TreeFile::default());
                     }
                 };
             }
@@ -136,20 +143,18 @@ impl QBFS {
                     // TODO: remove unnessecary clone
                     assert!(resource.is_file());
 
-                    let file = self.filetree.get_mut(resource).unwrap().file_mut();
-                    let old = std::mem::take(&mut file.contents);
+                    let file = self.tree.get_mut(resource).unwrap().file_mut();
+                    let old = self.table.remove(&file.hash);
                     let new = diff.apply(old);
                     file.hash = QBHash::compute(&new);
-                    file.contents = new.clone();
-
                     self.wrapper.write(resource, &new).await.unwrap();
+                    self.table.insert_hash(file.hash.clone(), new);
                 }
                 QBChangeKind::Change { contents } => {
                     assert!(resource.is_file());
 
-                    let file = self.filetree.get_mut(resource).unwrap().file_mut();
+                    let file = self.tree.get_mut(resource).unwrap().file_mut();
                     file.hash = QBHash::compute(&contents);
-                    file.contents = Default::default();
 
                     self.wrapper.write(resource, &contents).await.unwrap();
                 }
@@ -159,7 +164,7 @@ impl QBFS {
                         continue;
                     }
 
-                    self.filetree.remove(&resource);
+                    self.tree.remove(&resource);
                     let fspath = self.wrapper.fspath(&change.resource);
                     match resource.is_dir() {
                         true => tokio::fs::remove_dir_all(&fspath).await?,
@@ -175,11 +180,11 @@ impl QBFS {
                     let fspath = self.wrapper.fspath(&change.resource);
                     match resource.is_dir() {
                         true => {
-                            self.filetree.insert(resource, TreeDir::default());
+                            self.tree.insert(resource, TreeDir::default());
                             tokio::fs::create_dir_all(fspath).await?;
                         }
                         false => {
-                            self.filetree.insert(resource, TreeFile::default());
+                            self.tree.insert(resource, TreeFile::default());
                             drop(tokio::fs::File::create(fspath).await?);
                         }
                     };
@@ -195,7 +200,7 @@ impl QBFS {
         let contents = self.wrapper.read(&path).await?;
         let hash = QBHash::compute(&contents);
 
-        let file = self.filetree.get(&path).ok_or(QBFSError::NotFound)?.file();
+        let file = self.tree.get(&path).ok_or(QBFSError::NotFound)?.file();
 
         // no changes, nothing to do
         if file.hash == hash {
@@ -205,7 +210,7 @@ impl QBFS {
         match simdutf8::basic::from_utf8(&contents) {
             Ok(new) => {
                 let new = new.to_string();
-                let old = file.contents.clone();
+                let old = self.table.get(&file.hash).to_string();
 
                 Ok(Some(QBFileDiff::Text(QBDiff::compute(old, new))))
             }
@@ -228,9 +233,23 @@ impl QBFS {
     }
 
     /// TODO: doc
-    pub async fn save_filetree(&self) -> QBFSResult<()> {
+    pub async fn save_tree(&self) -> QBFSResult<()> {
         self.wrapper
-            .save(qbpaths::INTERNAL_FILETREE.as_ref(), &self.filetree)
+            .save(qbpaths::INTERNAL_FILETREE.as_ref(), &self.tree)
             .await
+    }
+
+    /// TODO: doc
+    pub async fn save_table(&self) -> QBFSResult<()> {
+        self.wrapper
+            .save(qbpaths::INTERNAL_FILETABLE.as_ref(), &self.table)
+            .await
+    }
+
+    pub async fn save(&self) -> QBFSResult<()> {
+        self.save_changelog().await?;
+        self.save_devices().await?;
+        self.save_tree().await?;
+        self.save_table().await
     }
 }

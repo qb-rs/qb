@@ -82,13 +82,11 @@ impl QBILocal {
                 );
 
                 self.fs.changelog.append(&mut entries);
-                self.fs.save_changelog().await.unwrap();
 
                 self.fs.apply_changes(&changes).await.unwrap();
 
                 let new_common = self.fs.changelog.head();
                 self.fs.devices.set_common(&QBID_DEFAULT, new_common);
-                self.fs.save_devices().await.unwrap();
 
                 // Send sync to remote
                 if !self.syncing {
@@ -103,6 +101,9 @@ impl QBILocal {
                 }
 
                 self.syncing = false;
+
+                // save the changes applied
+                self.fs.save().await.unwrap();
             }
             QBMessage::Broadcast { msg } => println!("BROADCAST: {}", msg),
         }
@@ -176,8 +177,9 @@ impl QBILocal {
         // Complete transaction
         let mut changes = std::mem::take(&mut self.transaction).complete_into();
         self.fs.changelog.append(&mut changes.clone());
-        self.fs.save_changelog().await.unwrap();
-        println!("NOTIFY");
+
+        // save the changes applied
+        self.fs.save().await.unwrap();
 
         // notify remote
         self.com

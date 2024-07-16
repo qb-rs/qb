@@ -5,9 +5,12 @@ use bitcode::{Decode, Encode};
 use thiserror::Error;
 use tracing::warn;
 
-use crate::fs::tree::QBFileTree;
+use crate::fs::table::QBFileTable;
 
-use super::resource::{qbpaths, QBPath, QBResource};
+use super::{
+    hash::QBHash,
+    resource::{qbpaths, QBPath, QBResource},
+};
 
 #[derive(Error, Debug)]
 pub enum QBIgnoreError {
@@ -56,17 +59,17 @@ impl QBIgnore {
 
 #[derive(Encode, Decode, Clone, Default)]
 pub struct QBIgnoreMapBuilder {
-    ignores: Vec<(QBPath, usize)>,
+    ignores: Vec<(QBPath, QBHash)>,
 }
 
 impl QBIgnoreMapBuilder {
     /// Build the ignore map
-    pub fn build(&self, filetree: &QBFileTree) -> QBIgnoreMap {
+    pub fn build(&self, table: &QBFileTable) -> QBIgnoreMap {
         let ignores = self
             .ignores
             .iter()
             .filter_map(|e| {
-                let contents = &filetree.arena[e.1].file().contents;
+                let contents = table.get(&e.1);
                 let ignore = QBIgnore::parse(&e.0, contents)
                     .inspect_err(|err| warn!("skipping ignore file for {}: {}", e.0, err))
                     .ok()?;
