@@ -8,8 +8,18 @@ use notify::{
     Event, EventKind, RecursiveMode, Watcher,
 };
 use qb::{
-    qbpaths, QBChange, QBChangeKind, QBChangelog, QBFileDiff, QBICommunication, QBIMessage,
-    QBMessage, QBTransaction, QBFS, QBID_DEFAULT,
+    common::resource::qbpaths,
+    fs::{QBFileDiff, QBFS},
+    interface::{
+        communication::QBICommunication,
+        protocol::{QBIMessage, QBMessage},
+        QBID_DEFAULT,
+    },
+    sync::{
+        change::{QBChange, QBChangeKind},
+        changelog::QBChangelog,
+        transaction::QBTransaction,
+    },
 };
 use qb_derive::QBIAsync;
 use tracing::{debug, info};

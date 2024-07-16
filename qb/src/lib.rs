@@ -4,34 +4,21 @@ use std::{
     thread::JoinHandle,
 };
 
+use fs::QBFS;
+use interface::{
+    communication::QBICommunication,
+    protocol::{QBIMessage, QBMessage},
+    QBID,
+};
+use sync::changelog::QBChangelog;
 pub use tokio::sync::mpsc;
 use tracing::{info, span, Level};
 pub use waker_fn::waker_fn;
 
-pub mod change;
-pub mod changelog;
-pub mod diff;
-pub mod filetree;
+pub mod common;
 pub mod fs;
-pub mod hash;
-pub mod ignore;
 pub mod interface;
-pub mod protocol;
-pub mod resource;
-pub mod transaction;
-
-// TODO: remove
-pub use change::*;
-pub use changelog::*;
-pub use diff::*;
-pub use filetree::*;
-pub use fs::*;
-pub use hash::*;
-pub use ignore::*;
-pub use interface::*;
-pub use protocol::*;
-pub use resource::*;
-pub use transaction::*;
+pub mod sync;
 
 struct QBIHandle {
     id: QBID,

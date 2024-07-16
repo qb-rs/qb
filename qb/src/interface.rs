@@ -1,12 +1,16 @@
+pub mod communication;
+pub mod protocol;
+
 use std::{
     collections::HashMap,
     hash::{DefaultHasher, Hash, Hasher},
 };
 
 use bitcode::{Decode, Encode};
+use communication::QBICommunication;
 use lazy_static::lazy_static;
 
-use crate::{QBHash, QBICommunication, QB_ENTRY_BASE};
+use crate::{common::hash::QBHash, sync::changelog::QB_ENTRY_BASE};
 
 pub trait QBI<T> {
     fn init(cx: T, com: QBICommunication) -> Self;

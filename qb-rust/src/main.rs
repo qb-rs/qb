@@ -2,7 +2,7 @@ use std::{fs::File, sync::Arc, time::Duration};
 use tracing_panic::panic_hook;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
-use qb::QBI;
+use qb::interface::QBI;
 use qbi_local::{QBILocal, QBILocalInit};
 
 #[tokio::main]
