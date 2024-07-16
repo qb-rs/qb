@@ -1,12 +1,26 @@
-// TODO: merge with changelog.rs
+// TODO: need to work hard on this one
+
+pub mod log;
+pub mod map;
+pub mod transaction;
 
 use core::fmt;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bitcode::{Decode, Encode};
+use lazy_static::lazy_static;
 use time::macros::format_description;
 
-use crate::common::{diff::QBDiff, hash::QBHash, resource::QBResource};
+use crate::common::{
+    diff::QBDiff,
+    hash::QBHash,
+    resource::{qbpaths, QBResource},
+};
+
+lazy_static! {
+    pub static ref QB_ENTRY_BASE: QBChange =
+        QBChange::new(0, QBChangeKind::Create, qbpaths::ROOT.clone().dir());
+}
 
 #[derive(Encode, Decode, Clone, Debug)]
 pub struct QBChange {

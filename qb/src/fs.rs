@@ -7,11 +7,12 @@ use std::{ffi::OsString, path::Path};
 use thiserror::Error;
 use tracing::warn;
 
-use table::QBFileTable;
-use tree::{QBFileTree, TreeDir, TreeFile};
+use table::{QBFSChange, QBFSChangeKind, QBFileTable};
+use tree::QBFileTree;
 use wrapper::QBFSWrapper;
 
 use crate::{
+    change::log::QBChangelog,
     common::{
         diff::QBDiff,
         hash::QBHash,
@@ -19,10 +20,6 @@ use crate::{
         resource::{qbpaths, QBPath, QBPathError},
     },
     interface::QBDevices,
-    sync::{
-        change::{QBChange, QBChangeKind},
-        changelog::QBChangelog,
-    },
 };
 
 #[derive(Error, Debug)]
@@ -92,38 +89,18 @@ impl QBFS {
 
     /// Process changes that were applied to the underlying file system
     /// not through the apply method.
-    pub fn notify_change(&mut self, change: &QBChange) {
-        let kind = &change.kind;
-        let resource = &change.resource;
-        match &kind {
-            QBChangeKind::Diff { diff } => {
-                // remove unnessecary clone
-                assert!(resource.is_file());
-
-                let file = self.tree.get_mut(resource).unwrap().file_mut();
-                let old = self.table.remove(&file.hash);
-                let new = diff.apply(old);
-                file.hash = QBHash::compute(&new);
-                self.table.insert_hash(file.hash.clone(), new);
+    pub fn notify_change(&mut self, change: QBFSChange) {
+        let kind = change.kind;
+        let resource = change.resource;
+        match kind {
+            QBFSChangeKind::Update { hash, .. } => {
+                self.tree.update(&resource, hash);
             }
-            QBChangeKind::Change { contents } => {
-                assert!(resource.is_file());
-
-                let file = self.tree.get_mut(resource).unwrap().file_mut();
-                file.hash = QBHash::compute(&contents);
+            QBFSChangeKind::Delete => {
+                self.tree.delete(&resource);
             }
-            QBChangeKind::Delete => {
-                self.tree.remove(&resource);
-            }
-            QBChangeKind::Create => {
-                match resource.is_dir() {
-                    true => {
-                        self.tree.insert(resource, TreeDir::default());
-                    }
-                    false => {
-                        self.tree.insert(resource, TreeFile::default());
-                    }
-                };
+            QBFSChangeKind::Create => {
+                self.tree.create(&resource);
             }
         }
     }
@@ -133,58 +110,44 @@ impl QBFS {
     /// !!!Use with caution, Safety checks not yet implemented!!!
     ///
     /// TODO: add caution checks
-    pub async fn apply_changes(&mut self, changes: &Vec<QBChange>) -> QBFSResult<()> {
+    pub async fn apply_changes(&mut self, changes: Vec<QBFSChange>) -> QBFSResult<()> {
         for change in changes {
-            let kind = &change.kind;
-            let resource = &change.resource;
-            let contains = self.wrapper.contains(&change.resource).await;
-            match &kind {
-                QBChangeKind::Diff { diff } => {
-                    // TODO: remove unnessecary clone
-                    assert!(resource.is_file());
-
-                    let file = self.tree.get_mut(resource).unwrap().file_mut();
-                    let old = self.table.remove(&file.hash);
-                    let new = diff.apply(old);
-                    file.hash = QBHash::compute(&new);
-                    self.wrapper.write(resource, &new).await.unwrap();
-                    self.table.insert_hash(file.hash.clone(), new);
+            let kind = change.kind;
+            let resource = change.resource;
+            let contains = self.wrapper.contains(&resource).await;
+            match kind {
+                QBFSChangeKind::Update { contents, hash } => {
+                    self.tree.update(&resource, hash);
+                    self.wrapper.write(&resource, &contents).await.unwrap();
                 }
-                QBChangeKind::Change { contents } => {
-                    assert!(resource.is_file());
+                QBFSChangeKind::Delete => {
+                    self.tree.delete(&resource);
 
-                    let file = self.tree.get_mut(resource).unwrap().file_mut();
-                    file.hash = QBHash::compute(&contents);
-
-                    self.wrapper.write(resource, &contents).await.unwrap();
-                }
-                QBChangeKind::Delete => {
                     if !contains {
-                        warn!("delete requested but resource {} not found!", resource);
+                        warn!("fs: delete {}, but not found!", resource);
                         continue;
                     }
 
-                    self.tree.remove(&resource);
-                    let fspath = self.wrapper.fspath(&change.resource);
+                    let fspath = self.wrapper.fspath(&resource);
                     match resource.is_dir() {
                         true => tokio::fs::remove_dir_all(&fspath).await?,
                         false => tokio::fs::remove_file(&fspath).await?,
                     };
                 }
-                QBChangeKind::Create => {
+                QBFSChangeKind::Create => {
+                    self.tree.create(&resource);
+
                     if contains {
-                        warn!("create requested but resource {} exists!", resource);
+                        warn!("fs: create {}, but exists!", resource);
                         continue;
                     }
 
-                    let fspath = self.wrapper.fspath(&change.resource);
+                    let fspath = self.wrapper.fspath(&resource);
                     match resource.is_dir() {
                         true => {
-                            self.tree.insert(resource, TreeDir::default());
                             tokio::fs::create_dir_all(fspath).await?;
                         }
                         false => {
-                            self.tree.insert(resource, TreeFile::default());
                             drop(tokio::fs::File::create(fspath).await?);
                         }
                     };

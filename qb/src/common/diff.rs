@@ -5,8 +5,8 @@ use super::hash::QBHash;
 #[derive(Encode, Decode, Debug, Clone)]
 pub struct QBDiff {
     /// describes the hash of the contents before the transformation
-    old_hash: QBHash,
-    ops: Vec<QBDiffOp>,
+    pub old_hash: QBHash,
+    pub ops: Vec<QBDiffOp>,
 }
 
 #[derive(Encode, Decode, Debug, Clone)]

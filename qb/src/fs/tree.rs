@@ -11,11 +11,11 @@ use itertools::Itertools;
 use tracing::warn;
 
 use crate::{
+    change::QBChange,
     common::{
         hash::QBHash,
         resource::{qbpaths, QBPath, QBResource},
     },
-    sync::change::QBChange,
 };
 
 use super::wrapper::QBFSWrapper;
@@ -24,12 +24,68 @@ use super::wrapper::QBFSWrapper;
 pub enum QBFileTreeNode {
     Dir(TreeDir),
     File(TreeFile),
-    Uninitialized,
+    None,
 }
 
 impl Default for QBFileTreeNode {
     fn default() -> Self {
-        Self::Uninitialized
+        Self::None
+    }
+}
+
+impl QBFileTreeNode {
+    /// check whether this is a file
+    #[inline]
+    pub fn is_file(&self) -> bool {
+        matches!(self, QBFileTreeNode::File(..))
+    }
+
+    /// check whether this is a dir
+    #[inline]
+    pub fn is_dir(&self) -> bool {
+        matches!(self, QBFileTreeNode::Dir(..))
+    }
+
+    /// check whether this is none
+    #[inline]
+    pub fn is_none(&self) -> bool {
+        matches!(self, QBFileTreeNode::None)
+    }
+
+    /// unwrap mutable file
+    #[inline]
+    pub fn file_mut(&mut self) -> &mut TreeFile {
+        if let QBFileTreeNode::File(val) = self {
+            return val;
+        }
+        panic!("error while unpacking")
+    }
+
+    /// unwrap file
+    #[inline]
+    pub fn file(&self) -> &TreeFile {
+        if let QBFileTreeNode::File(val) = self {
+            return val;
+        }
+        panic!("error while unpacking")
+    }
+
+    /// unwrap mutable dir
+    #[inline]
+    pub fn dir_mut(&mut self) -> &mut TreeDir {
+        if let QBFileTreeNode::Dir(val) = self {
+            return val;
+        }
+        panic!("error while unpacking")
+    }
+
+    /// unwrap dir
+    #[inline]
+    pub fn dir(&self) -> &TreeDir {
+        if let QBFileTreeNode::Dir(val) = self {
+            return val;
+        }
+        panic!("error while unpacking")
     }
 }
 
@@ -81,36 +137,6 @@ impl Into<QBFileTreeNode> for TreeFile {
     }
 }
 
-impl QBFileTreeNode {
-    pub fn file_mut(&mut self) -> &mut TreeFile {
-        if let QBFileTreeNode::File(val) = self {
-            return val;
-        }
-        panic!("error while unpacking")
-    }
-
-    pub fn file(&self) -> &TreeFile {
-        if let QBFileTreeNode::File(val) = self {
-            return val;
-        }
-        panic!("error while unpacking")
-    }
-
-    pub fn dir(&self) -> &TreeDir {
-        if let QBFileTreeNode::Dir(val) = self {
-            return val;
-        }
-        panic!("error while unpacking")
-    }
-
-    pub fn dir_mut(&mut self) -> &mut TreeDir {
-        if let QBFileTreeNode::Dir(val) = self {
-            return val;
-        }
-        panic!("error while unpacking")
-    }
-}
-
 #[derive(Hash, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Compare {
     resource: QBResource,
@@ -156,7 +182,7 @@ impl fmt::Display for QBFileTree {
             let prefix = match self.arena[curr] {
                 QBFileTreeNode::Dir(_) => "dir->",
                 QBFileTreeNode::File(_) => "file->",
-                QBFileTreeNode::Uninitialized => "init->",
+                QBFileTreeNode::None => "init->",
             };
 
             writeln!(f, "{}{}{}", "    ".repeat(ident), prefix, name)?;
@@ -313,7 +339,8 @@ impl QBFileTree {
     /// Create path in the tree structure
     ///
     /// This might allocate multiple directories.
-    fn create(&mut self, path: impl AsRef<QBPath>) -> Option<usize> {
+    /// This will return None if the path is taken.
+    fn create_ptr(&mut self, path: impl AsRef<QBPath>) -> Option<usize> {
         let mut pointer = 0;
 
         for seg in path.as_ref().segments() {
@@ -330,7 +357,7 @@ impl QBFileTree {
                     Some(idx) => idx,
                 },
                 QBFileTreeNode::File(_) => return None,
-                QBFileTreeNode::Uninitialized => {
+                QBFileTreeNode::None => {
                     let alloc = self.alloc();
                     let mut contents = HashMap::new();
                     contents.insert(seg.to_owned(), alloc);
@@ -340,12 +367,56 @@ impl QBFileTree {
             }
         }
 
+        // check that pointer is not taken
+        if !self.arena[pointer].is_none() {
+            return None;
+        }
+
         Some(pointer)
+    }
+
+    /// update this resource
+    ///
+    /// asserts that resource is a file
+    pub fn update(&mut self, resource: &QBResource, hash: QBHash) {
+        assert!(resource.is_file());
+        self[resource].file_mut().hash = hash;
+    }
+
+    /// create this resource
+    pub fn create(&mut self, resource: &QBResource) {
+        match self.create_ptr(&resource) {
+            Some(ptr) => {
+                self.arena[ptr] = match resource.is_dir() {
+                    true => TreeDir::default().into(),
+                    false => TreeFile::default().into(),
+                };
+            }
+            None => warn!("filetree: create {} but path not available!", resource),
+        }
+    }
+
+    /// delete this resource
+    pub fn delete(&mut self, resource: &QBResource) {
+        match self.index(&resource) {
+            Some(ptr) => {
+                if self.arena[ptr].is_dir() != resource.is_dir() {
+                    warn!(
+                        "filetree: delete {} but entry kind does not match!",
+                        resource
+                    );
+                    return;
+                }
+
+                std::mem::take(&mut self.arena[ptr]);
+            }
+            None => warn!("filetree: delete {} but not found!", resource),
+        }
     }
 
     /// Insert a node into the tree structure
     pub fn insert(&mut self, path: impl AsRef<QBPath>, node: impl Into<QBFileTreeNode>) {
-        let idx = self.create(path).expect("path goes over file");
+        let idx = self.create_ptr(path).expect("path goes over file");
         self.arena[idx] = node.into();
     }
 

@@ -10,7 +10,7 @@ use bitcode::{Decode, Encode};
 use communication::QBICommunication;
 use lazy_static::lazy_static;
 
-use crate::{common::hash::QBHash, sync::changelog::QB_ENTRY_BASE};
+use crate::{change::QB_ENTRY_BASE, common::hash::QBHash};
 
 pub trait QBI<T> {
     fn init(cx: T, com: QBICommunication) -> Self;

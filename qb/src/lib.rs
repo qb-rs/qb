@@ -4,21 +4,22 @@ use std::{
     thread::JoinHandle,
 };
 
+use tokio::sync::mpsc;
+use tracing::{info, span, Level};
+use waker_fn::waker_fn;
+
+use change::log::QBChangelog;
 use fs::QBFS;
 use interface::{
     communication::QBICommunication,
     protocol::{QBIMessage, QBMessage},
     QBID,
 };
-use sync::changelog::QBChangelog;
-pub use tokio::sync::mpsc;
-use tracing::{info, span, Level};
-pub use waker_fn::waker_fn;
 
+pub mod change;
 pub mod common;
 pub mod fs;
 pub mod interface;
-pub mod sync;
 
 struct QBIHandle {
     id: QBID,
@@ -92,10 +93,13 @@ impl QB {
                         let local_entries = self.fs.changelog.after(&common).unwrap();
 
                         // Apply changes
-                        let (mut entries, changes) =
+                        let (mut entries, fschanges) =
                             QBChangelog::merge(local_entries.clone(), changes).unwrap();
                         self.fs.changelog.append(&mut entries);
-                        self.fs.apply_changes(&changes).await.unwrap();
+
+                        let fschanges = self.fs.table.to_fschanges(fschanges);
+                        self.fs.apply_changes(fschanges).await.unwrap();
+
                         self.fs.save_changelog().await.unwrap();
 
                         let new_common = self.fs.changelog.head();

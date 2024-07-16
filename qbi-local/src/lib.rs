@@ -8,17 +8,13 @@ use notify::{
     Event, EventKind, RecursiveMode, Watcher,
 };
 use qb::{
+    change::{log::QBChangelog, transaction::QBTransaction, QBChange, QBChangeKind},
     common::resource::qbpaths,
     fs::{QBFileDiff, QBFS},
     interface::{
         communication::QBICommunication,
         protocol::{QBIMessage, QBMessage},
         QBID_DEFAULT,
-    },
-    sync::{
-        change::{QBChange, QBChangeKind},
-        changelog::QBChangelog,
-        transaction::QBTransaction,
     },
 };
 use qb_derive::QBIAsync;
@@ -72,10 +68,10 @@ impl QBILocal {
                 let local_entries = self.fs.changelog.after(&common).unwrap();
 
                 // Apply changes
-                let (mut entries, changes) =
+                let (mut entries, fschanges) =
                     QBChangelog::merge(local_entries.clone(), changes).unwrap();
                 self.watcher_skip.append(
-                    &mut changes
+                    &mut fschanges
                         .iter()
                         .map(|e| self.fs.wrapper.fspath(&e.resource))
                         .collect(),
@@ -83,7 +79,8 @@ impl QBILocal {
 
                 self.fs.changelog.append(&mut entries);
 
-                self.fs.apply_changes(&changes).await.unwrap();
+                let fschanges = self.fs.table.to_fschanges(fschanges);
+                self.fs.apply_changes(fschanges).await.unwrap();
 
                 let new_common = self.fs.changelog.head();
                 self.fs.devices.set_common(&QBID_DEFAULT, new_common);
@@ -160,7 +157,9 @@ impl QBILocal {
                 _ => continue,
             };
 
-            self.fs.notify_change(&entry);
+            // TODO: embed this directly
+            let fschange = self.fs.table.to_fschange(entry.clone());
+            self.fs.notify_change(fschange);
             self.transaction.push(entry);
         }
     }

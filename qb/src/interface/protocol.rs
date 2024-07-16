@@ -1,6 +1,6 @@
 use core::fmt;
 
-use crate::{common::hash::QBHash, sync::change::QBChange};
+use crate::{change::QBChange, common::hash::QBHash};
 
 // TODO: figure out what to call this
 #[derive(Debug, Clone)]

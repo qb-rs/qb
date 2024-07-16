@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::common::resource::QBResource;
 
-use super::change::{QBChange, QBChangeKind};
+use super::{QBChange, QBChangeKind};
 
 /// A timesorted changemap
 #[derive(Default, Debug)]
@@ -193,6 +193,7 @@ impl QBTransaction {
 
                     continue;
                 }
+                // TODO: collapse diffs using file table
                 _ => {}
             }
 

@@ -1,67 +1,13 @@
 // TODO: refactor this
 // TODO: merge into change.rs
 
-use std::{
-    cmp::Ordering,
-    collections::{HashMap, HashSet},
-};
+use std::{cmp::Ordering, collections::HashSet};
 
 use bitcode::{Decode, Encode};
-use lazy_static::lazy_static;
 
-use crate::common::{
-    hash::QBHash,
-    resource::{qbpaths, QBResource},
-};
+use crate::{change::map::QBChangeMap, common::hash::QBHash};
 
-use super::change::{QBChange, QBChangeKind};
-
-/// Only used internally for checking for merge conflicts.
-#[derive(Default, Debug)]
-struct QBChangeDiff(HashMap<QBResource, (bool, QBChange)>);
-
-impl QBChangeDiff {
-    /// Tries to push a change onto this ChangeDiff.
-    ///
-    /// Returns an error when conflicts arrise.
-    pub fn try_push(&mut self, (is_local, change): (bool, QBChange)) -> Result<bool, String> {
-        match self.0.get(&change.resource) {
-            Some((is_local_ex, change_ex)) => {
-                if is_local_ex == &is_local {
-                    Ok(true)
-                } else {
-                    match (&change_ex.kind, &change.kind) {
-                        (QBChangeKind::Create, QBChangeKind::Change { .. }) => Ok(true),
-                        _ if change_ex.kind.additive() && change.kind.additive() => Err(format!(
-                            "Merge would discard local changes on resource {}",
-                            change.resource
-                        )),
-                        (_, QBChangeKind::Delete) if change_ex.kind.additive() => Ok(false), // maybe let user decide in the future
-                        (QBChangeKind::Delete, QBChangeKind::Delete) => Ok(false),
-                        _ => Ok(true),
-                    }
-                }
-            }
-            _ => Ok(true),
-        }
-        .inspect(|_| {
-            _ = self.0.insert(change.resource.clone(), (is_local, change));
-        })
-    }
-
-    /// Returns changes that need to be done to the local FS
-    pub fn into_changes(self) -> Vec<QBChange> {
-        self.0
-            .into_values()
-            .filter_map(|(is_local, kind)| (!is_local).then(|| kind))
-            .collect::<Vec<_>>()
-    }
-}
-
-lazy_static! {
-    pub static ref QB_ENTRY_BASE: QBChange =
-        QBChange::new(0, QBChangeKind::Create, qbpaths::ROOT.clone().dir());
-}
+use super::{QBChange, QB_ENTRY_BASE};
 
 #[derive(Encode, Decode, Clone, Debug)]
 pub struct QBChangelog(pub Vec<QBChange>);
@@ -142,7 +88,7 @@ impl QBChangelog {
         let mut local_iter = local.into_iter().peekable();
         let mut remote_iter = remote.into_iter().peekable();
 
-        let mut changediff = QBChangeDiff::default();
+        let mut changemap = QBChangeMap::default();
         let mut entries = Vec::new();
 
         // skip common history
@@ -175,9 +121,10 @@ impl QBChangelog {
                 _ => break,
             };
 
-            if changediff.try_push((is_local, entry.clone()))? {
-                entries.push(entry);
-            }
+            //if changediff.try_push((is_local, entry.clone()))? {
+            changemap.push(is_local, entry.clone());
+            entries.push(entry);
+            //}
         }
 
         // check that there are no duplicate hashes
@@ -186,6 +133,6 @@ impl QBChangelog {
             entries.iter().all(move |x| uniq.insert(x.hash().clone()))
         });
 
-        Ok((entries, changediff.into_changes()))
+        Ok((entries, changemap.changes()))
     }
 }
