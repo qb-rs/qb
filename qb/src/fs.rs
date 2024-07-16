@@ -1,3 +1,5 @@
+//! This module contains stuff related to the local filesystem.
+
 pub mod table;
 pub mod tree;
 pub mod wrapper;
@@ -22,34 +24,51 @@ use crate::{
     interface::QBDevices,
 };
 
+/// struct describing an error that occured while dealing with the file system
 #[derive(Error, Debug)]
 pub enum QBFSError {
+    /// I/O error
     #[error("I/O error")]
     IO(#[from] std::io::Error),
+    /// struct encoding/decoding error
     #[error("bitcode error")]
     Bitcode(#[from] bitcode::Error),
+    /// path parsing error
     #[error("path error")]
     Path(#[from] QBPathError),
+    /// string conversion error
     #[error("osstring conversion error: {0:?}")]
     OsString(OsString),
+    /// file not found in filetree error
     #[error("file tree: not found")]
     NotFound,
 }
 
-pub type QBFSResult<T> = Result<T, QBFSError>;
+pub(crate) type QBFSResult<T> = Result<T, QBFSError>;
 
+/// struct describing a text or binary diff of a file
 pub enum QBFileDiff {
+    /// binary file
     Binary(Vec<u8>),
+    /// text file
     Text(QBDiff),
 }
 
+/// struct representing a local file system
 pub struct QBFS {
+    /// the file system wrapper
     pub wrapper: QBFSWrapper,
+    /// the file tree
     pub tree: QBFileTree,
+    /// the file table
     pub table: QBFileTable,
+    /// the changelog
     pub changelog: QBChangelog,
+    /// the devices
     pub devices: QBDevices,
+    /// the ignore builder
     pub ignore_builder: QBIgnoreMapBuilder,
+    /// the ignore
     pub ignore: QBIgnoreMap,
 }
 
@@ -116,7 +135,10 @@ impl QBFS {
             let resource = change.resource;
             let contains = self.wrapper.contains(&resource).await;
             match kind {
-                QBFSChangeKind::Update { contents, hash } => {
+                QBFSChangeKind::Update {
+                    content: contents,
+                    hash,
+                } => {
                     self.tree.update(&resource, hash);
                     self.wrapper.write(&resource, &contents).await.unwrap();
                 }
@@ -181,34 +203,35 @@ impl QBFS {
         }
     }
 
-    /// TODO: doc
+    /// Save changelog to file system.
     pub async fn save_changelog(&self) -> QBFSResult<()> {
         self.wrapper
             .save(qbpaths::INTERNAL_CHANGELOG.as_ref(), &self.changelog)
             .await
     }
 
-    /// TODO: doc
+    /// Save devices to file system.
     pub async fn save_devices(&self) -> QBFSResult<()> {
         self.wrapper
             .save(qbpaths::INTERNAL_DEVICES.as_ref(), &self.devices)
             .await
     }
 
-    /// TODO: doc
+    /// Save file tree to file system.
     pub async fn save_tree(&self) -> QBFSResult<()> {
         self.wrapper
             .save(qbpaths::INTERNAL_FILETREE.as_ref(), &self.tree)
             .await
     }
 
-    /// TODO: doc
+    /// Save file table to file system.
     pub async fn save_table(&self) -> QBFSResult<()> {
         self.wrapper
             .save(qbpaths::INTERNAL_FILETABLE.as_ref(), &self.table)
             .await
     }
 
+    /// Save state to file system.
     pub async fn save(&self) -> QBFSResult<()> {
         self.save_changelog().await?;
         self.save_devices().await?;

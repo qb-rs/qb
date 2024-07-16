@@ -1,4 +1,6 @@
-// TODO: merge into fs
+//! A filetree is a tree of files (hence the name) used for detecting
+//! socalled offline changes, that is, when changes occur while the
+//! application is not running and hence the file watchers cannot detect.
 
 use core::{fmt, panic};
 use std::{
@@ -20,10 +22,14 @@ use crate::{
 
 use super::wrapper::QBFSWrapper;
 
+/// a node stored in a [QBFileTree]
 #[derive(Encode, Decode)]
 pub enum QBFileTreeNode {
+    /// a directory
     Dir(TreeDir),
+    /// a file
     File(TreeFile),
+    /// unoccupied
     None,
 }
 
@@ -93,6 +99,7 @@ impl QBFileTreeNode {
 /// on the file system.
 #[derive(Encode, Decode, Default)]
 pub struct TreeDir {
+    /// the contents of the directory
     pub contents: HashMap<String, usize>,
 }
 
@@ -120,6 +127,7 @@ impl Into<QBFileTreeNode> for TreeDir {
 /// 2. smaller than a certain maximum
 #[derive(Encode, Decode)]
 pub struct TreeFile {
+    /// the hash of this file
     pub hash: QBHash,
 }
 
@@ -143,6 +151,10 @@ struct Compare {
     hash: QBHash,
 }
 
+/// a tree that stores a snapshot of the filesystem
+/// used for detecting offline changes, that is when the
+/// file watchers failed to detect changes due to the application
+/// not running
 #[derive(Encode, Decode)]
 pub struct QBFileTree {
     pub(crate) arena: Vec<QBFileTreeNode>,

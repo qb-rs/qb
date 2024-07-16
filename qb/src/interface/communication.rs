@@ -1,10 +1,15 @@
+//! This module contains helpers for the communication between
+//! the QBI and the master.
+
 use tokio::sync::mpsc;
 
 use super::protocol::{QBIMessage, QBMessage};
 
-/// Communication interface.
+/// struct describing the communication interface between QBI and master
 pub struct QBICommunication {
+    /// the transmission channel
     pub tx: mpsc::Sender<QBIMessage>,
+    /// the receive channel
     pub rx: mpsc::Receiver<QBMessage>,
 }
 

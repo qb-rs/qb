@@ -1,3 +1,5 @@
+//! A changemap is like a changelog for each file seperately.
+
 use std::collections::HashMap;
 
 use crate::common::resource::QBResource;
@@ -18,6 +20,7 @@ pub struct QBChangeMap {
 }
 
 impl QBChangeMap {
+    /// Push an entry onto this changemap.
     pub fn push(&mut self, is_local: bool, change: QBChange) {
         self.changes
             .entry(change.resource.clone())
@@ -25,7 +28,7 @@ impl QBChangeMap {
             .push(Entry { is_local, change });
     }
 
-    /// turn this changemap into a vec
+    /// Turn this changemap into a vector.
     pub fn changes(self) -> Vec<QBChange> {
         let mut entries = self
             .changes

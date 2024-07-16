@@ -1,5 +1,6 @@
+//! A changelog is a vector of changes that describes the
+//! transformations taken to a filesystem over time.
 // TODO: refactor this
-// TODO: merge into change.rs
 
 use std::{cmp::Ordering, collections::HashSet};
 
@@ -7,29 +8,29 @@ use bitcode::{Decode, Encode};
 
 use crate::{change::map::QBChangeMap, common::hash::QBHash};
 
-use super::{QBChange, QB_ENTRY_BASE};
+use super::{QBChange, QB_CHANGELOG_BASE};
 
+/// This struct describes the changes applied to a filesystem.
 #[derive(Encode, Decode, Clone, Debug)]
 pub struct QBChangelog(pub Vec<QBChange>);
 
 impl Default for QBChangelog {
     fn default() -> Self {
-        Self(vec![QB_ENTRY_BASE.clone()])
+        Self(vec![QB_CHANGELOG_BASE.clone()])
     }
 }
 
-// TODO: test whether merge(a, b) == merge(b, a)
 impl QBChangelog {
     /// Checks whether this changelog is valid.
     ///
     /// Changelog entries must be sorted according to their timestamp.
-    /// TODO: convert to error for details
+    // TODO: convert to error for details
     pub fn is_valid(&self) -> bool {
         if self.0.is_empty() {
             return false;
         }
 
-        if self.0.first().unwrap().hash() != QB_ENTRY_BASE.hash() {
+        if self.0.first().unwrap().hash() != QB_CHANGELOG_BASE.hash() {
             return false;
         }
 
@@ -45,7 +46,7 @@ impl QBChangelog {
         return true;
     }
 
-    /// Pushes an entry to this changelog.
+    /// Push an entry to this changelog.
     pub fn push(&mut self, entry: QBChange) -> bool {
         if self.0.iter().find(|e| e.hash() == entry.hash()).is_some() {
             return false;
@@ -55,28 +56,37 @@ impl QBChangelog {
         true
     }
 
+    /// Return all changes after the change with the given hash.
+    ///
+    /// This is exclusive, meaning it won't include the entry with the given hash.
     pub fn after(&mut self, hash: &QBHash) -> Option<Vec<QBChange>> {
         let index = self.0.iter().position(|e| e.hash() == hash)? + 1;
         Some(self.0.split_off(index))
     }
 
+    /// Return and clone all changes after the change with the given hash.
+    ///
+    /// This is exclusive, meaning it won't include the entry with the given hash.
     pub fn after_cloned(&self, hash: &QBHash) -> Option<Vec<QBChange>> {
         let index = self.0.iter().position(|e| e.hash() == hash)? + 1;
         Some(self.0.iter().skip(index).map(|e| e.clone()).collect())
     }
 
+    /// Append entries to this changelog.
     pub fn append(&mut self, entries: &mut Vec<QBChange>) {
         self.0.append(entries)
     }
 
-    /// This is safe if changelog is valid.
+    /// Return the head (the hash of the last change)
+    /// this is safe if changelog is valid
     pub fn head(&self) -> QBHash {
         unsafe { self.0.last().unwrap_unchecked() }.hash().clone()
     }
 
     // TODO: work with errors instead of asserts to prevent runtime panics
+    // TODO: test whether merge(a, b) == merge(b, a)
     //
-    /// Merge two changelogs and return either a common changelog plus the changes
+    /// merge two changelogs and return either a common changelog plus the changes
     /// required to each individual file system or a vec of merge conflicts.
     pub fn merge(
         local: Vec<QBChange>,

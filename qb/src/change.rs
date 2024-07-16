@@ -1,4 +1,8 @@
-// TODO: need to work hard on this one
+//! This module is responsible for everything that
+//! has to do with tracking changes. That is for example
+//! the [QBChange] structs themselves.
+//!
+//! TODO: need to work hard on this one
 
 pub mod log;
 pub mod map;
@@ -18,15 +22,20 @@ use crate::common::{
 };
 
 lazy_static! {
-    pub static ref QB_ENTRY_BASE: QBChange =
+    /// This is the base entry that comes first at every changelog
+    pub static ref QB_CHANGELOG_BASE: QBChange =
         QBChange::new(0, QBChangeKind::Create, qbpaths::ROOT.clone().dir());
 }
 
+/// This struct describes a change that has been done.
 #[derive(Encode, Decode, Clone, Debug)]
 pub struct QBChange {
     hash: QBHash,
+    /// a unix timestamp describing when the change has been committed
     pub timestamp: u64,
+    /// the kind of change
     pub kind: QBChangeKind,
+    /// the resource this change affects
     pub resource: QBResource,
 }
 
@@ -47,6 +56,7 @@ impl fmt::Display for QBChange {
 }
 
 impl QBChange {
+    /// Create a new change.
     pub fn new(timestamp: u64, kind: QBChangeKind, resource: QBResource) -> Self {
         let mut ret = Self {
             hash: Default::default(),
@@ -62,7 +72,7 @@ impl QBChange {
         ret
     }
 
-    /// Create a new entry from the current system time
+    /// Create a new change with the current system time.
     #[inline]
     pub fn now(kind: QBChangeKind, resource: QBResource) -> Self {
         let ts = SystemTime::now()
@@ -73,41 +83,34 @@ impl QBChange {
         Self::new(ts, kind, resource)
     }
 
+    /// return the hash of this change
     #[inline]
     pub fn hash(&self) -> &QBHash {
         &self.hash
     }
 }
 
-// TODO: move filetree updates into fswrapper
-
+/// an enum describing the different kinds of changes
 #[derive(Encode, Decode, Clone, Debug)]
 pub enum QBChangeKind {
-    // CopyFrom,
-    // CopyTo { from: QBResource }, // TODO: remove from
-    // MoveFrom,
-    // MoveTo { from: QBResource }, // TODO: remove from
-    // Allow on: File
-    Change { contents: Vec<u8> }, // TODO: diff file
-    Diff { diff: QBDiff },
-    // Allow on: File, Directory
+    /// change a binary file
+    UpdateBinary {
+        /// the file's new contents
+        contents: Vec<u8>,
+    },
+    /// change a text file
+    UpdateText {
+        /// a diff that when applied yields the new contents
+        diff: QBDiff,
+    },
+    /// create a file or directory
     Create,
-    // Allow on: File, empty Directory
+    /// delete a file or directory
     Delete,
 }
 
 impl QBChangeKind {
-    pub fn additive(&self) -> bool {
-        match self {
-            // QBChangeKind::CopyTo { .. } => true,
-            // QBChangeKind::MoveTo { .. } => true,
-            QBChangeKind::Change { .. } => true,
-            QBChangeKind::Diff { .. } => true,
-            QBChangeKind::Create => true,
-            _ => false,
-        }
-    }
-
+    /// currently unimplemented, will be interessting once move and copy are here again
     pub fn external(&self) -> bool {
         // TODO: add when move is here again
         false

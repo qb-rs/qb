@@ -1,3 +1,8 @@
+//! a rust library for the quixbyte service
+//!
+//! [Github](https://github.com/qb-rs/qb)
+#![warn(missing_docs)]
+
 use std::{
     path::Path,
     task::{Context, Poll, Waker},
@@ -30,6 +35,8 @@ struct QBIHandle {
     // bridge: Box<dyn Fn(String) -> Box<dyn Any + Sync + Send + 'static>>,
 }
 
+/// the library core that controls the messaging between
+/// the master thread and the QBIs
 pub struct QB {
     handles: Vec<QBIHandle>,
     noop: Waker,
@@ -37,6 +44,9 @@ pub struct QB {
 }
 
 impl QB {
+    /// initialize the library
+    ///
+    /// root is the path where it will store its files
     pub async fn init(root: impl AsRef<Path>) -> QB {
         let fs = QBFS::init(root).await;
 
@@ -47,6 +57,7 @@ impl QB {
         }
     }
 
+    /// remove unused handles [from QBIs that have finished]
     pub fn clean_handles(&mut self) {
         let pos = self
             .handles
@@ -57,6 +68,11 @@ impl QB {
         }
     }
 
+    /// process the handles
+    ///
+    /// this will look for new messages from the QBIs and
+    /// handle those respectively. Additionally this will
+    /// synchronize when new changes arise.
     pub async fn process_handles(&mut self) {
         let mut broadcast = Vec::new();
         self.clean_handles();
@@ -140,6 +156,7 @@ impl QB {
         }
     }
 
+    /// attach a QBI to the master
     pub async fn attach_qbi<C, F, T>(
         &mut self,
         id: impl Into<QBID>,
@@ -178,6 +195,7 @@ impl QB {
         });
     }
 
+    /// synchronize changes across all QBIs
     pub async fn sync(&mut self) {
         for handle in self.handles.iter_mut() {
             let handle_common = self.fs.devices.get_common(&handle.id);

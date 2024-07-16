@@ -1,20 +1,45 @@
+//! A diff describes a transformation that can be applied to a specific
+//! input to get a specific output. It is used for compressing changes on
+//! text files.
+
 use bitcode::{Decode, Encode};
 
 use super::hash::QBHash;
 
+/// struct which stores operations for a transformation on a string
 #[derive(Encode, Decode, Debug, Clone)]
 pub struct QBDiff {
-    /// describes the hash of the contents before the transformation
+    /// Describes the hash of the content before the transformation.
     pub old_hash: QBHash,
+    /// the transformations themselves
     pub ops: Vec<QBDiffOp>,
 }
 
+/// struct which stores a single operation for a transformation on a string
 #[derive(Encode, Decode, Debug, Clone)]
 pub enum QBDiffOp {
-    Equal { len: usize },
-    Delete { len: usize },
-    Insert { content: String },
-    Replace { len: usize, content: String },
+    /// range is equal
+    Equal {
+        /// length of range
+        len: usize,
+    },
+    /// range should not exist in transformed string
+    Delete {
+        /// length of range
+        len: usize,
+    },
+    /// content should get inserted in transformed string
+    Insert {
+        /// text to be inserted
+        content: String,
+    },
+    /// content should replace the range in transformed string
+    Replace {
+        /// length of range
+        len: usize,
+        /// text to be inserted
+        content: String,
+    },
 }
 
 struct Index {

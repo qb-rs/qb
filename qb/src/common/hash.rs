@@ -1,9 +1,13 @@
+//! A hash is a sequence with constant length which gets mapped
+//! to some other data. Here it is used for differentiating between files
+//! without storing the file's contents.
+
 use core::fmt;
 
 use bitcode::{Decode, Encode};
 use sha2::{digest::generic_array::GenericArray, Digest, Sha256};
 
-// type alias to make changing to other hashes easier
+/// struct which describes a hash
 #[derive(Encode, Decode, PartialEq, Eq, Clone, Default, Hash, PartialOrd, Ord)]
 pub struct QBHash(pub(crate) [u8; 32]);
 
@@ -20,14 +24,14 @@ impl fmt::Debug for QBHash {
 }
 
 impl QBHash {
-    /// Compute the hash
+    /// Compute the hash.
     pub fn compute(contents: impl AsRef<[u8]>) -> QBHash {
         let mut hash = QBHash::default();
         Self::compute_mut(&mut hash, contents);
         hash
     }
 
-    /// Compute the hash
+    /// Compute the hash.
     pub fn compute_mut(hash: &mut QBHash, contents: impl AsRef<[u8]>) {
         let mut hasher = Sha256::new();
         hasher.update(contents);

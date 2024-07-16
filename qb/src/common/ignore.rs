@@ -1,7 +1,11 @@
+//! An ignore file is a file that specifies certain overrides for
+//! which files to exclude or to include when syncing.
+
+// TODO: add no std support by using a different ignore implementation
+
 use std::collections::HashMap;
 
 use bitcode::{Decode, Encode};
-/// TODO: add no std support by using a different ignore implementation
 use thiserror::Error;
 use tracing::warn;
 
@@ -12,16 +16,21 @@ use super::{
     resource::{qbpaths, QBPath, QBResource},
 };
 
+/// struct describing an error that occured when dealing with an ignore file
 #[derive(Error, Debug)]
 pub enum QBIgnoreError {
+    /// parser error
     #[error("gitignore error")]
     Gitignore(#[from] ignore::Error),
 }
 
-pub type QBIgnoreResult<T> = Result<T, QBIgnoreError>;
+pub(crate) type QBIgnoreResult<T> = Result<T, QBIgnoreError>;
 
+/// struct describing where the ignore rule was defined
 pub enum QBIgnoreGlob<'a> {
+    /// in ignore file
     GitIgnore(&'a ignore::gitignore::Glob),
+    /// in internal code
     Internal,
 }
 
@@ -31,6 +40,7 @@ impl<'a> From<&'a ignore::gitignore::Glob> for QBIgnoreGlob<'a> {
     }
 }
 
+/// struct describing an ignore file
 pub struct QBIgnore(ignore::gitignore::Gitignore);
 
 impl QBIgnore {
@@ -57,6 +67,7 @@ impl QBIgnore {
     }
 }
 
+/// builder for [QBIgnoreMap]
 #[derive(Encode, Decode, Clone, Default)]
 pub struct QBIgnoreMapBuilder {
     ignores: Vec<(QBPath, QBHash)>,
@@ -81,6 +92,7 @@ impl QBIgnoreMapBuilder {
     }
 }
 
+/// struct describing a collection of ignore files that cover a file system
 pub struct QBIgnoreMap {
     ignores: HashMap<QBPath, QBIgnore>,
 }

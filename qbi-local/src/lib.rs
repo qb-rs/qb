@@ -133,10 +133,10 @@ impl QBILocal {
                     let kind = self.fs.diff(&path).await.unwrap();
                     match kind {
                         Some(QBFileDiff::Text(diff)) => {
-                            QBChange::new(ts, QBChangeKind::Diff { diff }, path.file())
+                            QBChange::new(ts, QBChangeKind::UpdateText { diff }, path.file())
                         }
                         Some(QBFileDiff::Binary(contents)) => {
-                            QBChange::new(ts, QBChangeKind::Change { contents }, path.file())
+                            QBChange::new(ts, QBChangeKind::UpdateBinary { contents }, path.file())
                         }
                         None => continue,
                     }

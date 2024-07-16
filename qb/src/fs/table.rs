@@ -1,3 +1,8 @@
+//! A filetable is a map which stores different text blobs
+//! by their hash for applying diffs. We need this, as the
+//! file stored on the file system might not always contain
+//! the right content.
+
 use std::collections::HashMap;
 
 use bitcode::{Decode, Encode};
@@ -7,14 +12,29 @@ use crate::{
     common::{hash::QBHash, resource::QBResource},
 };
 
+/// struct describing a change that can be directly applied to the file system
+///
+/// this differs from [QBChange], as the diff stored in UpdateText
+/// is already expanded, so no further processing is required.
 pub struct QBFSChange {
+    /// the resource this change affects
     pub resource: QBResource,
+    /// the kind of change
     pub kind: QBFSChangeKind,
 }
 
+/// enum describing the different kinds of changes
 pub enum QBFSChangeKind {
-    Update { contents: Vec<u8>, hash: QBHash },
+    /// update a file
+    Update {
+        /// the file content
+        content: Vec<u8>,
+        /// the hash of the content
+        hash: QBHash,
+    },
+    /// create a file or directory
     Create,
+    /// delete a file or directory
     Delete,
 }
 
@@ -59,17 +79,20 @@ impl QBFileTable {
         let kind = match kind {
             QBChangeKind::Create => QBFSChangeKind::Create,
             QBChangeKind::Delete => QBFSChangeKind::Delete,
-            QBChangeKind::Change { contents } => {
+            QBChangeKind::UpdateBinary { contents } => {
                 let hash = QBHash::compute(&contents);
-                QBFSChangeKind::Update { contents, hash }
+                QBFSChangeKind::Update {
+                    content: contents,
+                    hash,
+                }
             }
-            QBChangeKind::Diff { diff } => {
+            QBChangeKind::UpdateText { diff } => {
                 let old = self.get(&diff.old_hash).to_string();
                 let contents = diff.apply(old);
                 let hash = QBHash::compute(&contents);
                 self.insert_hash(hash.clone(), contents.clone());
                 QBFSChangeKind::Update {
-                    contents: contents.into(),
+                    content: contents.into(),
                     hash,
                 }
             }

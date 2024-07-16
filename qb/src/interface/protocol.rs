@@ -1,30 +1,31 @@
+//! This module contains the protocol of the interfaces, that is,
+//! the messages that are being sent between QBI and master.
+
 use core::fmt;
 
 use crate::{change::QBChange, common::hash::QBHash};
 
-// TODO: figure out what to call this
+/// a message coming from the QBI
 #[derive(Debug, Clone)]
 pub enum QBIMessage {
-    // TODO: figure out which structs to send over
-    // RTCConnectionOffer {},
-    // RTCConnectionAnswer {},
+    /// broadcast a message
     Broadcast {
+        /// message to broadcast
         msg: String,
     },
+    /// exchange the common change, sent when newest common
+    /// change gets updated (synchronization)
     Common {
+        /// hash that points to the common change
         common: QBHash,
-    }, // When newest common entry gets updated
+    },
+    /// synchronize
     Sync {
+        /// the common hash that was used for creating the changes vector
         common: QBHash,
+        /// a vector describing the changes
         changes: Vec<QBChange>,
     },
-    // SyncComplete is the same as Sync with empty entries
-    //SyncComplete {
-    //    common: QBHash,
-    //},
-    //BridgeRequest {
-    //    key: String,
-    //},
 }
 
 impl fmt::Display for QBIMessage {
@@ -51,29 +52,27 @@ impl fmt::Display for QBIMessage {
     }
 }
 
+/// a message coming from the master
 #[derive(Debug, Clone)]
 pub enum QBMessage {
-    // TODO: figure out which structs to send over
-    // RTCConnectionOffer {},
-    // RTCConnectionAnswer {},
+    /// broadcast a message
     Broadcast {
+        /// message to broadcast
         msg: String,
     },
-    // Check if we even need this
+    /// exchange the common change, sent when newest common
+    /// change gets updated (synchronization)
     Common {
+        /// hash that points to the common change
         common: QBHash,
-    }, // When newest common entry gets updated
+    },
+    /// synchronize
     Sync {
+        /// the common hash that was used for creating the changes vector
         common: QBHash,
+        /// a vector describing the changes
         changes: Vec<QBChange>,
     },
-    // SyncComplete is the same as Sync with empty entries
-    //SyncComplete {
-    //    common: QBHash,
-    //},
-    //BridgeRequest {
-    //    val: Box<dyn Any + Send + Sync + 'static>,
-    //},
 }
 
 impl fmt::Display for QBMessage {

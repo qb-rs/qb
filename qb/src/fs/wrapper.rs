@@ -1,3 +1,6 @@
+//! A file system wrapper wraps the local file system and implements
+//! functions like read, write or delete.
+
 use std::{
     ffi::OsString,
     path::{Path, PathBuf},
@@ -9,8 +12,11 @@ use crate::common::resource::{qbpaths, QBPath, QBResource, QBResourceKind};
 
 use super::{QBFSError, QBFSResult};
 
+/// struct which wraps the local file system
 pub struct QBFSWrapper {
+    /// the root path
     pub root: PathBuf,
+    /// the root path (as a string)
     pub root_str: String,
 }
 
@@ -151,6 +157,7 @@ impl QBFSWrapper {
         resource.as_ref().to_path(self.root_str.as_str())
     }
 
+    /// Parse a local fs path to a quixbyte path.
     pub fn parse(&self, path: impl AsRef<str>) -> QBFSResult<QBPath> {
         Ok(QBPath::parse(self.root_str.as_str(), path)?)
     }

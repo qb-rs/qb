@@ -1,10 +1,12 @@
+//! A transaction contains changes that were not yet applied to a changelog.
+
 use std::collections::HashMap;
 
 use crate::common::resource::QBResource;
 
 use super::{QBChange, QBChangeKind};
 
-/// A timesorted changemap
+/// A timesorted changemap.
 #[derive(Default, Debug)]
 pub struct QBTransaction {
     pub(crate) changes: HashMap<QBResource, Vec<QBChange>>,

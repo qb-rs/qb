@@ -1,3 +1,7 @@
+//! A resource is a combination of file path that points somewhere
+//! on a filesystem plus the resource kind, a file, a directory or
+//! (not yet implemented) a system link.
+
 use std::{
     fmt, panic,
     path::{Path, PathBuf},
@@ -7,32 +11,44 @@ use bitcode::{Decode, Encode};
 
 use thiserror::Error;
 
+/// crate that stores common paths to resources
 pub mod qbpaths {
     use lazy_static::lazy_static;
 
     use super::QBPath;
 
     lazy_static! {
+        /// the root directory of the file system
         pub static ref ROOT: QBPath = unsafe { QBPath::new("/") };
+        /// the directory where quixbyte stores internal files
         pub static ref INTERNAL: QBPath = unsafe { QBPath::new("/.qb") };
+        /// the internal changelog path
         pub static ref INTERNAL_CHANGELOG: QBPath = unsafe { QBPath::new("/.qb/changelog") };
+        /// the internal filetree path
         pub static ref INTERNAL_FILETREE: QBPath = unsafe { QBPath::new("/.qb/filetree") };
+        /// the internal filetable path
         pub static ref INTERNAL_FILETABLE: QBPath = unsafe { QBPath::new("/.qb/filetable") };
+        /// the internal ignore path
         pub static ref INTERNAL_IGNORE: QBPath = unsafe { QBPath::new("/.qb/ignore") };
+        /// the internal devices path
         pub static ref INTERNAL_DEVICES: QBPath = unsafe { QBPath::new("/.qb/devices") };
     }
 }
 
+/// struct describing an error that occured when dealing with paths
 #[derive(Error, Debug)]
 pub enum QBPathError {
+    /// the maximum amount of segments ("/") in the to be parsed path
     #[error("path exceeds maximum number of segments {0}")]
     MaxSegsExceeded(usize),
+    /// directory traversal attempt detected while parsing path
     #[error("directory traversal detected")]
     TraversalDetected,
 }
 
-pub type QBPathResult<T> = Result<T, QBPathError>;
+pub(crate) type QBPathResult<T> = Result<T, QBPathError>;
 
+/// struct describing a path pointing to a resource
 #[derive(Encode, Decode, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct QBPath(String);
 
@@ -71,6 +87,7 @@ impl QBPath {
         Ok(Self(Self::clean(path)?))
     }
 
+    /// convert this path to a file system path
     pub fn as_fspath(&self) -> &Path {
         Path::new(&self.0)
     }
@@ -215,16 +232,23 @@ impl QBPath {
     }
 }
 
+/// struct describing a resource stored on this path
 #[derive(Encode, Decode, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct QBResource {
+    /// the path that points to where this resource is stored
     pub path: QBPath,
+    /// the kind of resource
     pub kind: QBResourceKind,
 }
 
+/// enum describing the kind of a resource
 #[derive(Encode, Decode, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum QBResourceKind {
+    /// a file
     File,
+    /// a directory
     Dir,
+    /// a symlink (unimplemented currently)
     Symlink,
 }
 
