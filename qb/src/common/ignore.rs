@@ -46,6 +46,7 @@ pub struct QBIgnore(ignore::gitignore::Gitignore);
 impl QBIgnore {
     /// Match resource against this ignore file
     pub fn matched(&self, resource: &QBResource) -> ignore::Match<QBIgnoreGlob> {
+        // println!("MATCHING: {}", resource);
         self.0
             .matched(resource.path.as_fspath(), resource.is_dir())
             .map(|e| e.into())
@@ -82,11 +83,13 @@ impl QBIgnoreMapBuilder {
             return;
         }
 
+        let path = resource.path.clone().parent().unwrap();
+
         match kind {
             QBFSChangeKind::Update { hash, .. } => {
-                self.ignores.insert(resource.path.clone(), hash.clone());
+                self.ignores.insert(path, hash.clone());
             }
-            QBFSChangeKind::Delete => _ = self.ignores.remove(&resource.path),
+            QBFSChangeKind::Delete => _ = self.ignores.remove(&path),
             QBFSChangeKind::Create => {}
         };
     }
@@ -134,29 +137,32 @@ impl QBIgnoreMap {
             return;
         }
 
+        let path = resource.path.clone().parent().unwrap();
+
         match kind {
             QBFSChangeKind::Update { content, .. } => {
                 match simdutf8::basic::from_utf8(content) {
                     Ok(str) => {
-                        let path = &resource.path;
-                        let ignore = match QBIgnore::parse(path, str) {
+                        let ignore = match QBIgnore::parse(&path, str) {
                             Ok(ignore) => ignore,
                             Err(err) => {
                                 warn!("skipping ignore file for {}: {}", path, err);
                                 return;
                             }
                         };
-                        self.ignores.insert(path.clone(), ignore);
+                        self.ignores.insert(path, ignore);
                     }
                     Err(_) => {}
                 };
             }
-            QBFSChangeKind::Delete => _ = self.ignores.remove(&resource.path),
+            QBFSChangeKind::Delete => _ = self.ignores.remove(&path),
             QBFSChangeKind::Create => {}
         };
     }
 
     /// Match resource against this ignore map
+    ///
+    /// TODO: unexpected behaviour when trying to ignore directories without /
     pub fn matched(&self, resource: &QBResource) -> ignore::Match<QBIgnoreGlob> {
         // ignore internal directories
         if qbpaths::INTERNAL.is_parent(resource) {
@@ -165,6 +171,7 @@ impl QBIgnoreMap {
 
         let mut curr = Some(resource.path.clone());
         while let Some(path) = curr {
+            // println!("TRYING: {}", path);
             if let Some(ignore) = self.ignores.get(&path) {
                 let m = ignore.matched(resource);
                 if !m.is_none() {

@@ -2,7 +2,7 @@
 //! functions like read, write or delete.
 
 use std::{
-    ffi::OsString,
+    ffi::{OsStr, OsString},
     path::{Path, PathBuf},
 };
 
@@ -158,7 +158,15 @@ impl QBFSWrapper {
     }
 
     /// Parse a local fs path to a quixbyte path.
-    pub fn parse(&self, path: impl AsRef<str>) -> QBFSResult<QBPath> {
+    pub fn parse(&self, path: impl AsRef<Path>) -> QBFSResult<QBPath> {
+        Ok(QBPath::parse(
+            self.root_str.as_str(),
+            Self::_strref(path.as_ref().as_os_str())?,
+        )?)
+    }
+
+    /// Parse a local fs path to a quixbyte path.
+    pub fn parse_str(&self, path: impl AsRef<str>) -> QBFSResult<QBPath> {
         Ok(QBPath::parse(self.root_str.as_str(), path)?)
     }
 
@@ -168,5 +176,13 @@ impl QBFSWrapper {
         osstring
             .into_string()
             .map_err(|str| QBFSError::OsString(str))
+    }
+
+    /// Utility for converting an osstr into a str
+    #[inline]
+    fn _strref<'a>(osstring: &'a OsStr) -> QBFSResult<&'a str> {
+        osstring
+            .to_str()
+            .ok_or_else(|| QBFSError::OsString(osstring.to_owned()))
     }
 }

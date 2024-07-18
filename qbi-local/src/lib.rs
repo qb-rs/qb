@@ -1,3 +1,4 @@
+use core::panic;
 use std::{
     path::PathBuf,
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -9,7 +10,6 @@ use notify::{
 };
 use qb::{
     change::{log::QBChangelog, transaction::QBTransaction, QBChange, QBChangeKind},
-    common::resource::qbpaths,
     fs::{QBFileDiff, QBFS},
     interface::{
         communication::QBICommunication,
@@ -109,56 +109,65 @@ impl QBILocal {
     // TODO: filter events caused by apply
     async fn on_watcher(&mut self, event: Event) {
         debug!("event {:?}", event);
-        for (i, fspath) in event.paths.iter().enumerate() {
-            let path = self.fs.wrapper.parse(fspath.to_str().unwrap()).unwrap();
-
-            // skip internal files
-            if qbpaths::INTERNAL.is_parent(&path) {
-                continue;
+        let fspath = &event.paths[0];
+        let path = self.fs.wrapper.parse(fspath).unwrap();
+        let resource = match event.kind {
+            EventKind::Remove(RemoveKind::Folder) | EventKind::Create(CreateKind::Folder) => {
+                path.dir()
             }
-
-            if self.watcher_skip.iter().find(|e| e == &fspath).is_some() {
-                debug!("skip {:?}", path);
-                continue;
+            EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
+                match self.fs.tree.get(&path).map(|e| e.is_dir()) {
+                    Some(true) => path.dir(),
+                    Some(false) => path.file(),
+                    None => return,
+                }
             }
+            EventKind::Create(CreateKind::File)
+            | EventKind::Remove(RemoveKind::File)
+            | EventKind::Access(AccessKind::Close(AccessMode::Write)) => path.file(),
+            _ => return,
+        };
 
-            let ts = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_millis() as u64
-                + i as u64;
-
-            let entry = match event.kind {
-                EventKind::Access(AccessKind::Close(AccessMode::Write)) => {
-                    let kind = self.fs.diff(&path).await.unwrap();
-                    match kind {
-                        Some(QBFileDiff::Text(diff)) => {
-                            QBChange::new(ts, QBChangeKind::UpdateText { diff }, path.file())
-                        }
-                        Some(QBFileDiff::Binary(contents)) => {
-                            QBChange::new(ts, QBChangeKind::UpdateBinary { contents }, path.file())
-                        }
-                        None => continue,
-                    }
-                }
-                EventKind::Modify(ModifyKind::Name(RenameMode::From))
-                | EventKind::Remove(RemoveKind::File) => {
-                    QBChange::new(ts, QBChangeKind::Delete, path.file())
-                }
-                EventKind::Remove(RemoveKind::Folder) => {
-                    QBChange::new(ts, QBChangeKind::Delete, path.dir())
-                }
-                EventKind::Create(CreateKind::File) => {
-                    QBChange::new(ts, QBChangeKind::Create, path.file())
-                }
-                EventKind::Create(CreateKind::Folder) => {
-                    QBChange::new(ts, QBChangeKind::Create, path.dir())
-                }
-                _ => continue,
-            };
-
-            self.transaction.push(entry);
+        // skip ignored files
+        if !self.fs.ignore.matched(&resource).is_none() {
+            return;
         }
+
+        if self.watcher_skip.iter().find(|e| e == &fspath).is_some() {
+            debug!("skip {:?}", resource);
+            return;
+        }
+
+        let ts = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_millis() as u64;
+
+        let change = match event.kind {
+            EventKind::Access(AccessKind::Close(AccessMode::Write)) => {
+                let kind = self.fs.diff(&resource).await.unwrap();
+                match kind {
+                    Some(QBFileDiff::Text(diff)) => {
+                        QBChange::new(ts, QBChangeKind::UpdateText { diff }, resource)
+                    }
+                    Some(QBFileDiff::Binary(contents)) => {
+                        QBChange::new(ts, QBChangeKind::UpdateBinary { contents }, resource)
+                    }
+                    None => return,
+                }
+            }
+            EventKind::Modify(ModifyKind::Name(RenameMode::From)) | EventKind::Remove(..) => {
+                QBChange::new(ts, QBChangeKind::Delete, resource)
+            }
+            EventKind::Create(..) => QBChange::new(ts, QBChangeKind::Create, resource),
+            _ => panic!("this should not happen"),
+        };
+
+        // tree needs to be updated continously
+        let fschange = self.fs.table.to_fschange(change.clone());
+        self.fs.tree.notify_change(&fschange);
+
+        self.transaction.push(change);
     }
 
     fn should_sync(&mut self) -> bool {

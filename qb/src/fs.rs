@@ -10,7 +10,7 @@ use thiserror::Error;
 use tracing::warn;
 
 use table::{QBFSChange, QBFSChangeKind, QBFileTable};
-use tree::QBFileTree;
+use tree::{QBFileTree, TreeFile};
 use wrapper::QBFSWrapper;
 
 use crate::{
@@ -182,11 +182,15 @@ impl QBFS {
     }
 
     /// Compare the entry on the filesystem to the entry stored
-    pub async fn diff(&self, path: impl AsRef<QBPath>) -> QBFSResult<Option<QBFileDiff>> {
+    pub async fn diff(&mut self, path: impl AsRef<QBPath>) -> QBFSResult<Option<QBFileDiff>> {
         let contents = self.wrapper.read(&path).await?;
         let hash = QBHash::compute(&contents);
 
-        let file = self.tree.get(&path).ok_or(QBFSError::NotFound)?.file();
+        let file = self
+            .tree
+            .get_or_insert(&path, TreeFile::default().into())
+            .unwrap()
+            .file();
 
         // no changes, nothing to do
         if file.hash == hash {

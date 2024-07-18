@@ -343,6 +343,34 @@ impl QBFileTree {
         Some(&mut self.arena[idx])
     }
 
+    /// Get an entry of this tree
+    #[inline]
+    pub fn get_or_insert(
+        &mut self,
+        path: impl AsRef<QBPath>,
+        default: QBFileTreeNode,
+    ) -> Option<&QBFileTreeNode> {
+        let idx = self.get_or_create_ptr(path)?;
+        if self.arena[idx].is_none() {
+            self.arena[idx] = default;
+        }
+        Some(&self.arena[idx])
+    }
+
+    /// Get an entry of this tree
+    #[inline]
+    pub fn get_or_insert_mut(
+        &mut self,
+        path: impl AsRef<QBPath>,
+        default: QBFileTreeNode,
+    ) -> Option<&mut QBFileTreeNode> {
+        let idx = self.get_or_create_ptr(path)?;
+        if self.arena[idx].is_none() {
+            self.arena[idx] = default;
+        }
+        Some(&mut self.arena[idx])
+    }
+
     /// Get the index for this resource
     fn index(&self, path: impl AsRef<QBPath>) -> Option<usize> {
         let mut pointer = 0;
@@ -373,6 +401,20 @@ impl QBFileTree {
     /// This might allocate multiple directories.
     /// This will return None if the path is taken.
     fn create_ptr(&mut self, path: impl AsRef<QBPath>) -> Option<usize> {
+        let pointer = self.get_or_create_ptr(path)?;
+
+        // check that pointer is not taken
+        if !self.arena[pointer].is_none() {
+            return None;
+        }
+
+        Some(pointer)
+    }
+
+    /// Create path in the tree structure
+    ///
+    /// This might allocate multiple directories.
+    fn get_or_create_ptr(&mut self, path: impl AsRef<QBPath>) -> Option<usize> {
         let mut pointer = 0;
 
         for seg in path.as_ref().segments() {
@@ -397,11 +439,6 @@ impl QBFileTree {
                     alloc
                 }
             }
-        }
-
-        // check that pointer is not taken
-        if !self.arena[pointer].is_none() {
-            return None;
         }
 
         Some(pointer)

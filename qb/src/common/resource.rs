@@ -19,7 +19,7 @@ pub mod qbpaths {
 
     lazy_static! {
         /// the root directory of the file system
-        pub static ref ROOT: QBPath = unsafe { QBPath::new("/") };
+        pub static ref ROOT: QBPath = unsafe { QBPath::new("") };
         /// the directory where quixbyte stores internal files
         pub static ref INTERNAL: QBPath = unsafe { QBPath::new("/.qb") };
         /// the internal changelog path
