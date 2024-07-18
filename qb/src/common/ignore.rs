@@ -3,13 +3,13 @@
 
 // TODO: add no std support by using a different ignore implementation
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use bitcode::{Decode, Encode};
 use thiserror::Error;
 use tracing::warn;
 
-use crate::fs::table::QBFileTable;
+use crate::fs::table::{QBFSChange, QBFSChangeKind, QBFileTable};
 
 use super::{
     hash::QBHash,
@@ -58,7 +58,6 @@ impl QBIgnore {
         let fspath = path.as_ref().as_fspath();
         let mut builder = ignore::gitignore::GitignoreBuilder::new(fspath);
         for line in contents.as_ref().split("\n") {
-            // TODO: error handling
             builder.add_line(None, line)?;
         }
         // TODO: error handling
@@ -68,23 +67,41 @@ impl QBIgnore {
 }
 
 /// builder for [QBIgnoreMap]
-#[derive(Encode, Decode, Clone, Default)]
+#[derive(Encode, Decode, Clone, Default, Debug)]
 pub struct QBIgnoreMapBuilder {
-    ignores: Vec<(QBPath, QBHash)>,
+    ignores: HashMap<QBPath, QBHash>,
 }
 
 impl QBIgnoreMapBuilder {
+    /// Notify this builder of a file system change
+    pub fn notify_change(&mut self, change: &QBFSChange) {
+        let resource = &change.resource;
+        let kind = &change.kind;
+
+        if resource.path.name() != Some(".qbignore") {
+            return;
+        }
+
+        match kind {
+            QBFSChangeKind::Update { hash, .. } => {
+                self.ignores.insert(resource.path.clone(), hash.clone());
+            }
+            QBFSChangeKind::Delete => _ = self.ignores.remove(&resource.path),
+            QBFSChangeKind::Create => {}
+        };
+    }
+
     /// Build the ignore map
     pub fn build(&self, table: &QBFileTable) -> QBIgnoreMap {
         let ignores = self
             .ignores
             .iter()
-            .filter_map(|e| {
-                let contents = table.get(&e.1);
-                let ignore = QBIgnore::parse(&e.0, contents)
-                    .inspect_err(|err| warn!("skipping ignore file for {}: {}", e.0, err))
+            .filter_map(|(path, hash)| {
+                let contents = table.get(hash);
+                let ignore = QBIgnore::parse(path, contents)
+                    .inspect_err(|err| warn!("skipping ignore file for {}: {}", path, err))
                     .ok()?;
-                Some((e.0.clone(), ignore))
+                Some((path.clone(), ignore))
             })
             .collect::<HashMap<QBPath, QBIgnore>>();
 
@@ -97,7 +114,48 @@ pub struct QBIgnoreMap {
     ignores: HashMap<QBPath, QBIgnore>,
 }
 
+impl fmt::Display for QBIgnoreMap {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "ignore map with {} file(s):", self.ignores.len())?;
+        for (path, ignore) in self.ignores.iter() {
+            write!(f, "- {} -> {} rules", path, ignore.0.num_ignores())?;
+        }
+        Ok(())
+    }
+}
+
 impl QBIgnoreMap {
+    /// Notify this ignore map of a file system change
+    pub fn notify_change(&mut self, change: &QBFSChange) {
+        let resource = &change.resource;
+        let kind = &change.kind;
+
+        if resource.path.name().unwrap() != ".qbignore" {
+            return;
+        }
+
+        match kind {
+            QBFSChangeKind::Update { content, .. } => {
+                match simdutf8::basic::from_utf8(content) {
+                    Ok(str) => {
+                        let path = &resource.path;
+                        let ignore = match QBIgnore::parse(path, str) {
+                            Ok(ignore) => ignore,
+                            Err(err) => {
+                                warn!("skipping ignore file for {}: {}", path, err);
+                                return;
+                            }
+                        };
+                        self.ignores.insert(path.clone(), ignore);
+                    }
+                    Err(_) => {}
+                };
+            }
+            QBFSChangeKind::Delete => _ = self.ignores.remove(&resource.path),
+            QBFSChangeKind::Create => {}
+        };
+    }
+
     /// Match resource against this ignore map
     pub fn matched(&self, resource: &QBResource) -> ignore::Match<QBIgnoreGlob> {
         // ignore internal directories

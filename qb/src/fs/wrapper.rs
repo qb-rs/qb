@@ -154,7 +154,7 @@ impl QBFSWrapper {
 
     /// Returns the path to the given resource on this filesystem.
     pub fn fspath(&self, resource: impl AsRef<QBPath>) -> PathBuf {
-        resource.as_ref().to_path(self.root_str.as_str())
+        resource.as_ref().get_fspath(self.root_str.as_str())
     }
 
     /// Parse a local fs path to a quixbyte path.

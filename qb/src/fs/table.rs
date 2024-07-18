@@ -3,13 +3,17 @@
 //! file stored on the file system might not always contain
 //! the right content.
 
+use core::panic;
 use std::collections::HashMap;
 
 use bitcode::{Decode, Encode};
 
 use crate::{
     change::{QBChange, QBChangeKind},
-    common::{hash::QBHash, resource::QBResource},
+    common::{
+        hash::{QBHash, QB_HASH_EMPTY},
+        resource::QBResource,
+    },
 };
 
 /// struct describing a change that can be directly applied to the file system
@@ -39,15 +43,27 @@ pub enum QBFSChangeKind {
 }
 
 /// used for storing previous file versions
-#[derive(Encode, Decode, Debug, Clone, Default)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct QBFileTable {
     contents: HashMap<QBHash, String>,
+}
+
+impl Default for QBFileTable {
+    fn default() -> Self {
+        // add empty file content entry
+        let mut contents = HashMap::new();
+        contents.insert(QB_HASH_EMPTY.clone(), "".to_string());
+        Self { contents }
+    }
 }
 
 impl QBFileTable {
     /// return the contents for this hash
     pub fn get<'a>(&'a self, hash: &QBHash) -> &'a str {
-        self.contents.get(hash).map(|e| e.as_str()).unwrap_or("")
+        match self.contents.get(hash) {
+            Some(val) => val.as_str(),
+            None => panic!("could not find file table entry for hash {}", hash),
+        }
     }
 
     /// remove & return the contents for this hash

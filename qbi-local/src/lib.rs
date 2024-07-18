@@ -157,9 +157,6 @@ impl QBILocal {
                 _ => continue,
             };
 
-            // TODO: embed this directly
-            let fschange = self.fs.table.to_fschange(entry.clone());
-            self.fs.notify_change(fschange);
             self.transaction.push(entry);
         }
     }
@@ -175,6 +172,9 @@ impl QBILocal {
 
         // Complete transaction
         let mut changes = std::mem::take(&mut self.transaction).complete_into();
+        // TODO: embed this directly
+        let fschanges = self.fs.table.to_fschanges(changes.clone());
+        self.fs.notify_changes(fschanges.iter());
         self.fs.changelog.append(&mut changes.clone());
 
         // save the changes applied

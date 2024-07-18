@@ -95,6 +95,8 @@ impl QBFS {
             .load_or_default::<QBChangelog>(qbpaths::INTERNAL_CHANGELOG.as_ref())
             .await;
 
+        println!("loaded {}", ignore);
+
         Self {
             wrapper,
             tree,
@@ -107,74 +109,73 @@ impl QBFS {
     }
 
     /// Process changes that were applied to the underlying file system
-    /// not through the apply method.
-    pub fn notify_change(&mut self, change: QBFSChange) {
-        let kind = change.kind;
-        let resource = change.resource;
-        match kind {
-            QBFSChangeKind::Update { hash, .. } => {
-                self.tree.update(&resource, hash);
-            }
-            QBFSChangeKind::Delete => {
-                self.tree.delete(&resource);
-            }
-            QBFSChangeKind::Create => {
-                self.tree.create(&resource);
-            }
+    pub fn notify_changes<'a>(&mut self, changes: impl Iterator<Item = &'a QBFSChange>) {
+        for change in changes {
+            self.notify_change(change);
         }
     }
 
     /// Applies changes to this filesystem.
     ///
     /// !!!Use with caution, Safety checks not yet implemented!!!
-    ///
-    /// TODO: add caution checks
     pub async fn apply_changes(&mut self, changes: Vec<QBFSChange>) -> QBFSResult<()> {
         for change in changes {
-            let kind = change.kind;
-            let resource = change.resource;
-            let contains = self.wrapper.contains(&resource).await;
-            match kind {
-                QBFSChangeKind::Update {
-                    content: contents,
-                    hash,
-                } => {
-                    self.tree.update(&resource, hash);
-                    self.wrapper.write(&resource, &contents).await.unwrap();
-                }
-                QBFSChangeKind::Delete => {
-                    self.tree.delete(&resource);
+            self.apply_change(change).await?;
+        }
 
-                    if !contains {
-                        warn!("fs: delete {}, but not found!", resource);
-                        continue;
+        Ok(())
+    }
+
+    /// Process change that was applied to the underlying file system
+    pub fn notify_change(&mut self, change: &QBFSChange) {
+        self.tree.notify_change(change);
+        self.ignore_builder.notify_change(change);
+        self.ignore.notify_change(change);
+    }
+
+    /// Applies a single change to this filesystem.
+    ///
+    /// !!!Use with caution, Safety checks not yet implemented!!!
+    pub async fn apply_change(&mut self, change: QBFSChange) -> QBFSResult<()> {
+        self.notify_change(&change);
+
+        let kind = change.kind;
+        let resource = change.resource;
+        let contains = self.wrapper.contains(&resource).await;
+        match kind {
+            QBFSChangeKind::Update { content, .. } => {
+                self.wrapper.write(&resource, &content).await.unwrap();
+            }
+            QBFSChangeKind::Delete => {
+                if !contains {
+                    // Think about returning an error?
+                    warn!("fs: delete {}, but not found!", resource);
+                    return Ok(());
+                }
+
+                let fspath = self.wrapper.fspath(&resource);
+                match resource.is_dir() {
+                    true => tokio::fs::remove_dir_all(&fspath).await?,
+                    false => tokio::fs::remove_file(&fspath).await?,
+                };
+            }
+            QBFSChangeKind::Create => {
+                if contains {
+                    // Think about returning an error?
+                    warn!("fs: create {}, but exists!", resource);
+                    return Ok(());
+                }
+
+                let fspath = self.wrapper.fspath(&resource);
+                match resource.is_dir() {
+                    true => {
+                        tokio::fs::create_dir_all(fspath).await?;
                     }
-
-                    let fspath = self.wrapper.fspath(&resource);
-                    match resource.is_dir() {
-                        true => tokio::fs::remove_dir_all(&fspath).await?,
-                        false => tokio::fs::remove_file(&fspath).await?,
-                    };
-                }
-                QBFSChangeKind::Create => {
-                    self.tree.create(&resource);
-
-                    if contains {
-                        warn!("fs: create {}, but exists!", resource);
-                        continue;
+                    false => {
+                        drop(tokio::fs::File::create(fspath).await?);
                     }
-
-                    let fspath = self.wrapper.fspath(&resource);
-                    match resource.is_dir() {
-                        true => {
-                            tokio::fs::create_dir_all(fspath).await?;
-                        }
-                        false => {
-                            drop(tokio::fs::File::create(fspath).await?);
-                        }
-                    };
-                }
-            };
+                };
+            }
         }
 
         Ok(())
@@ -231,11 +232,19 @@ impl QBFS {
             .await
     }
 
+    /// Save ignore builder to file system.
+    pub async fn save_ignore(&self) -> QBFSResult<()> {
+        self.wrapper
+            .save(qbpaths::INTERNAL_IGNORE.as_ref(), &self.ignore_builder)
+            .await
+    }
+
     /// Save state to file system.
     pub async fn save(&self) -> QBFSResult<()> {
         self.save_changelog().await?;
         self.save_devices().await?;
         self.save_tree().await?;
+        self.save_ignore().await?;
         self.save_table().await
     }
 }

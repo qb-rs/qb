@@ -116,11 +116,8 @@ impl QB {
                         let fschanges = self.fs.table.to_fschanges(fschanges);
                         self.fs.apply_changes(fschanges).await.unwrap();
 
-                        self.fs.save_changelog().await.unwrap();
-
                         let new_common = self.fs.changelog.head();
                         self.fs.devices.set_common(&handle.id, new_common);
-                        self.fs.save_devices().await.unwrap();
 
                         // Send sync to remote
                         if !handle.syncing {
@@ -135,6 +132,8 @@ impl QB {
                         }
 
                         handle.syncing = false;
+
+                        self.fs.save().await.unwrap();
                     }
                     QBIMessage::Common { common } => {
                         self.fs.devices.set_common(&handle.id, common);

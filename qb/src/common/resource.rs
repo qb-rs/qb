@@ -87,11 +87,6 @@ impl QBPath {
         Ok(Self(Self::clean(path)?))
     }
 
-    /// convert this path to a file system path
-    pub fn as_fspath(&self) -> &Path {
-        Path::new(&self.0)
-    }
-
     /// Convert this path into a resource
     ///
     /// Alias for QBResource::new_file(self)
@@ -119,14 +114,15 @@ impl QBPath {
     /// Checks whether this path is parent of other
     #[inline]
     pub fn is_parent(&self, other: impl AsRef<QBPath>) -> bool {
-        other.as_ref().0.starts_with(&self.0)
+        // TODO: not optimal, remove clone
+        other.as_ref().0.starts_with(&(self.0.clone() + "/"))
     }
 
     /// Returns the parent path (if any)
     #[inline]
     pub fn parent(mut self) -> Option<Self> {
-        let pos = self.0.chars().rev().position(|c| c == '/')?;
-        let new_len = self.0.len() - pos - 1;
+        let trim = self.0.chars().rev().position(|c| c == '/')? + 1;
+        let new_len = self.0.len() - trim;
         self.0.truncate(new_len);
         Some(self)
     }
@@ -183,6 +179,22 @@ impl QBPath {
         self.0.split("/").skip(1)
     }
 
+    /// Return the file extension of this path.
+    #[inline]
+    pub fn ext(&self) -> Option<&str> {
+        let trim = self.0.chars().rev().position(|c| c == '.')?;
+        let pos = self.0.len() - trim;
+        Some(&self.0[pos..])
+    }
+
+    /// Return the file name, that is, the last segment of this path.
+    #[inline]
+    pub fn name(&self) -> Option<&str> {
+        let trim = self.0.chars().rev().position(|c| c == '/')?;
+        let pos = self.0.len() - trim;
+        Some(&self.0[pos..])
+    }
+
     /// Convert into string
     #[inline]
     pub fn to_string(&self, root: &str) -> String {
@@ -192,8 +204,14 @@ impl QBPath {
 
     /// Convert into path
     #[inline]
-    pub fn to_path(&self, root: &str) -> PathBuf {
+    pub fn get_fspath(&self, root: &str) -> PathBuf {
         self.to_string(root).into()
+    }
+
+    /// convert this path to a file system path
+    #[inline]
+    pub fn as_fspath(&self) -> &Path {
+        Path::new(&self.0)
     }
 
     /// Cleans the given path string

@@ -20,7 +20,10 @@ use crate::{
     },
 };
 
-use super::wrapper::QBFSWrapper;
+use super::{
+    table::{QBFSChange, QBFSChangeKind},
+    wrapper::QBFSWrapper,
+};
 
 /// a node stored in a [QBFileTree]
 #[derive(Encode, Decode)]
@@ -210,6 +213,23 @@ impl fmt::Display for QBFileTree {
 }
 
 impl QBFileTree {
+    /// Process changes that were applied to the underlying file system
+    pub fn notify_change(&mut self, change: &QBFSChange) {
+        let kind = &change.kind;
+        let resource = &change.resource;
+        match kind {
+            QBFSChangeKind::Update { hash, .. } => {
+                self.update(resource, hash.clone());
+            }
+            QBFSChangeKind::Delete => {
+                self.delete(resource);
+            }
+            QBFSChangeKind::Create => {
+                self.create(resource);
+            }
+        }
+    }
+
     fn get_tree(&self, path: impl AsRef<QBPath>) -> HashSet<Compare> {
         let idx = match self.index(&path) {
             Some(idx) => idx,

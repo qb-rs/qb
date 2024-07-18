@@ -28,7 +28,6 @@ pub trait QBI<T> {
 }
 
 /// struct which represents an id from a specific QBI connection
-// TODO: common repository, id managing
 #[derive(Encode, Decode, Debug, Clone, Default, Eq, PartialEq, Hash)]
 pub struct QBID(pub(crate) u64);
 

@@ -5,6 +5,7 @@
 use core::fmt;
 
 use bitcode::{Decode, Encode};
+use lazy_static::lazy_static;
 use sha2::{digest::generic_array::GenericArray, Digest, Sha256};
 
 /// struct which describes a hash
@@ -21,6 +22,11 @@ impl fmt::Debug for QBHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "QBHash({})", hex::encode(&self.0))
     }
+}
+
+lazy_static! {
+    /// The hash for empty contents
+    pub static ref QB_HASH_EMPTY: QBHash = QBHash::compute(vec![]);
 }
 
 impl QBHash {
