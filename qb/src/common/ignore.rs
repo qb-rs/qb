@@ -48,7 +48,7 @@ impl QBIgnore {
     pub fn matched(&self, resource: &QBResource) -> ignore::Match<QBIgnoreGlob> {
         // println!("MATCHING: {}", resource);
         self.0
-            .matched(resource.path.as_fspath(), resource.is_dir())
+            .matched_path_or_any_parents(resource.path.as_fspath(), resource.is_dir())
             .map(|e| e.into())
     }
 
