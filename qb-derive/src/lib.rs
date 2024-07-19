@@ -12,8 +12,8 @@ pub fn derive_qbi_async(input: proc_macro::TokenStream) -> proc_macro::TokenStre
 
     let expanded = quote! {
         // The generated impl.
-        impl qb::interface::QBI<#generics> for #name {
-            fn init(cx: #generics, com: qb::interface::communication::QBICommunication) -> Self{
+        impl qb_core::interface::QBI<#generics> for #name {
+            fn init(cx: #generics, com: qb_core::interface::QBICommunication) -> Self{
                 tokio::runtime::Builder::new_current_thread()
                     .enable_all()
                     .build()

@@ -8,13 +8,12 @@ use notify::{
     event::{AccessKind, AccessMode, CreateKind, ModifyKind, RemoveKind, RenameMode},
     Event, EventKind, RecursiveMode, Watcher,
 };
-use qb::{
+use qb_core::{
     change::{log::QBChangelog, transaction::QBTransaction, QBChange, QBChangeKind},
     fs::{QBFileDiff, QBFS},
     interface::{
-        communication::QBICommunication,
         protocol::{QBIMessage, QBMessage},
-        QBID_DEFAULT,
+        QBICommunication, QBID_DEFAULT,
     },
 };
 use qb_derive::QBIAsync;

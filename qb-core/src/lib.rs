@@ -16,9 +16,8 @@ use waker_fn::waker_fn;
 use change::log::QBChangelog;
 use fs::QBFS;
 use interface::{
-    communication::QBICommunication,
     protocol::{QBIMessage, QBMessage},
-    QBID,
+    QBICommunication, QBID,
 };
 
 pub mod change;

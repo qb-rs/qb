@@ -1,7 +1,5 @@
-# TODO: rename to qb_lib or similar
-
 [package]
-name = "qb"
+name = "qb-core"
 version.workspace = true
 edition.workspace = true
 

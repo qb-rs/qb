@@ -1,5 +1,5 @@
 [package]
-name = "qb-rust"
+name = "qb-daemon"
 version.workspace = true
 edition.workspace = true
 
@@ -7,6 +7,6 @@ edition.workspace = true
 tokio = { version = "1.37.0", features = ["rt", "sync"] }
 # qbi-rtc = { path = "../qbi-rtc" }
 qbi-local = { path = "../qbi-local" }
-qb = { path = "../qb" }
+qb-core = { path = "../qb-core" }
 tracing-subscriber = "0.3.18"
 tracing-panic = "0.1.2"

@@ -2,7 +2,7 @@ use std::{fs::File, sync::Arc, time::Duration};
 use tracing_panic::panic_hook;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
-use qb::interface::QBI;
+use qb_core::{interface::QBI, QB};
 use qbi_local::{QBILocal, QBILocalInit};
 
 #[tokio::main]
@@ -25,7 +25,7 @@ async fn main() {
         )
         .init();
 
-    let mut qb = qb::QB::init("./local").await;
+    let mut qb = QB::init("./local").await;
 
     qb.attach_qbi(
         "local1",

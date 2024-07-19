@@ -500,7 +500,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "qb"
+name = "qb-core"
 version = "0.1.0"
 dependencies = [
  "bitcode",
@@ -519,6 +519,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "qb-daemon"
+version = "0.1.0"
+dependencies = [
+ "qb-core",
+ "qbi-local",
+ "tokio",
+ "tracing-panic",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "qb-derive"
 version = "0.1.0"
 dependencies = [
@@ -527,23 +538,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "qb-rust"
-version = "0.1.0"
-dependencies = [
- "qb",
- "qbi-local",
- "tokio",
- "tracing-panic",
- "tracing-subscriber",
-]
-
-[[package]]
 name = "qbi-local"
 version = "0.1.0"
 dependencies = [
  "bitcode",
  "notify",
- "qb",
+ "qb-core",
  "qb-derive",
  "tokio",
  "tracing",
