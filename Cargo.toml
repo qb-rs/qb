@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["qb-core", "qb-derive", "qb-daemon", "qbi-local"]
+members = ["qb-core", "qb-derive", "qb-daemon", "qbi-local", "qb-cli"]
 
 [workspace.package]
 version = "0.1.0"

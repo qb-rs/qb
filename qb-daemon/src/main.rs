@@ -1,3 +1,6 @@
+use interprocess::local_socket::{
+    traits::tokio::Listener, GenericNamespaced, ListenerNonblockingMode, ListenerOptions, ToNsName,
+};
 use std::{fs::File, sync::Arc, time::Duration};
 use tracing_panic::panic_hook;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
@@ -7,6 +10,7 @@ use qbi_local::{QBILocal, QBILocalInit};
 
 #[tokio::main]
 async fn main() {
+    // Setup formatting
     std::panic::set_hook(Box::new(panic_hook));
 
     let stdout_log = tracing_subscriber::fmt::layer().pretty();
@@ -25,6 +29,19 @@ async fn main() {
         )
         .init();
 
+    let name = "qb-daemon.sock";
+    let name = name.to_ns_name::<GenericNamespaced>().unwrap();
+    let socket = ListenerOptions::new()
+        .name(name)
+        .nonblocking(ListenerNonblockingMode::Both)
+        .create_tokio()
+        .unwrap();
+
+    // TODO: implement
+    // socket.accept().await.unwrap();
+    // println!("RECV: connection");
+
+    // Initialize the core library
     let mut qb = QB::init("./local").await;
 
     qb.attach_qbi(
@@ -36,20 +53,7 @@ async fn main() {
     )
     .await;
 
-    //qb.attach_qbi(
-    //    "local2",
-    //    QBILocal::init,
-    //    QBILocalInit {
-    //        path: "./local2".into(),
-    //    },
-    //)
-    //.await;
-
-    //qb.changelog.push(QBChange::now(
-    //    QBChangeKind::Create,
-    //    unsafe { QBPath::new("abc.txt") }.file(),
-    //));
-
+    // Process handles
     loop {
         qb.process_handles().await;
         tokio::time::sleep(Duration::from_millis(10)).await;
