@@ -4,6 +4,7 @@
 #![warn(missing_docs)]
 
 use std::{
+    collections::HashMap,
     path::Path,
     task::{Context, Poll, Waker},
     thread::JoinHandle,
@@ -14,10 +15,11 @@ use tracing::{info, span, Level};
 use waker_fn::waker_fn;
 
 use change::log::QBChangelog;
+use common::id::QBID;
 use fs::QBFS;
 use interface::{
-    protocol::{QBIMessage, QBMessage},
-    QBICommunication, QBID,
+    protocol::{Message, QBIMessage, QBMessage},
+    QBICommunication,
 };
 
 pub mod change;
@@ -26,7 +28,6 @@ pub mod fs;
 pub mod interface;
 
 struct QBIHandle {
-    id: QBID,
     join_handle: JoinHandle<()>,
     tx: mpsc::Sender<QBMessage>,
     rx: mpsc::Receiver<QBIMessage>,
@@ -34,10 +35,17 @@ struct QBIHandle {
     // bridge: Box<dyn Fn(String) -> Box<dyn Any + Sync + Send + 'static>>,
 }
 
+impl QBIHandle {
+    /// TODO: doc
+    pub async fn send(&self, msg: impl Into<QBMessage>) {
+        self.tx.send(msg.into()).await.unwrap()
+    }
+}
+
 /// the library core that controls the messaging between
 /// the master thread and the QBIs
 pub struct QB {
-    handles: Vec<QBIHandle>,
+    handles: HashMap<QBID, QBIHandle>,
     noop: Waker,
     fs: QBFS,
 }
@@ -51,19 +59,20 @@ impl QB {
 
         QB {
             noop: waker_fn(|| {}),
-            handles: Vec::new(),
+            handles: HashMap::new(),
             fs,
         }
     }
 
     /// remove unused handles [from QBIs that have finished]
     pub fn clean_handles(&mut self) {
-        let pos = self
+        let to_remove = self
             .handles
             .iter()
-            .position(|h| h.join_handle.is_finished());
-        if let Some(pos) = pos {
-            self.handles.swap_remove(pos);
+            .filter_map(|(k, v)| v.join_handle.is_finished().then(|| k.clone()))
+            .collect::<Vec<_>>();
+        for id in to_remove {
+            self.handles.remove(&id);
         }
     }
 
@@ -75,11 +84,11 @@ impl QB {
     pub async fn process_handles(&mut self) {
         let mut broadcast = Vec::new();
         self.clean_handles();
-        for handle in self.handles.iter_mut() {
-            let span = span!(Level::INFO, "qbi-process", id = handle.id.0);
+        for (id, handle) in self.handles.iter_mut() {
+            let span = span!(Level::INFO, "qbi-process", id = id.0);
             let _guard = span.enter();
 
-            let handle_common = self.fs.devices.get_common(&handle.id);
+            let handle_common = self.fs.devices.get_common(&id);
 
             // SYNCHRONIZE
             if !handle.syncing && handle_common != &self.fs.changelog.head() {
@@ -87,22 +96,20 @@ impl QB {
                 let changes = self.fs.changelog.after_cloned(handle_common).unwrap();
                 handle.syncing = true;
                 handle
-                    .tx
-                    .send(QBMessage::Sync {
+                    .send(Message::Sync {
                         common: handle_common.clone(),
                         changes,
                     })
-                    .await
-                    .unwrap();
+                    .await;
             }
 
             let poll = handle.rx.poll_recv(&mut Context::from_waker(&self.noop));
 
-            if let Poll::Ready(Some(msg)) = poll {
+            if let Poll::Ready(Some(QBIMessage(msg))) = poll {
                 info!("recv: {}", msg);
 
                 match msg {
-                    QBIMessage::Sync { common, changes } => {
+                    Message::Sync { common, changes } => {
                         assert!(handle_common == &common);
 
                         let local_entries = self.fs.changelog.after(&common).unwrap();
@@ -116,52 +123,41 @@ impl QB {
                         self.fs.apply_changes(fschanges).await.unwrap();
 
                         let new_common = self.fs.changelog.head();
-                        self.fs.devices.set_common(&handle.id, new_common);
+                        self.fs.devices.set_common(&id, new_common);
 
                         // Send sync to remote
                         if !handle.syncing {
                             handle
-                                .tx
-                                .send(QBMessage::Sync {
+                                .send(Message::Sync {
                                     common,
                                     changes: local_entries,
                                 })
-                                .await
-                                .unwrap();
+                                .await;
                         }
 
                         handle.syncing = false;
 
                         self.fs.save().await.unwrap();
                     }
-                    QBIMessage::Common { common } => {
-                        self.fs.devices.set_common(&handle.id, common);
+                    Message::Common { common } => {
+                        self.fs.devices.set_common(&id, common);
                         self.fs.save_devices().await.unwrap();
                     }
-                    QBIMessage::Broadcast { msg } => broadcast.push(msg),
+                    Message::Broadcast { msg } => broadcast.push(msg),
                 }
             }
         }
 
         for msg in broadcast {
-            for handle in self.handles.iter_mut() {
-                handle
-                    .tx
-                    .send(QBMessage::Broadcast { msg: msg.clone() })
-                    .await
-                    .unwrap();
+            for handle in self.handles.values_mut() {
+                handle.send(Message::Broadcast { msg: msg.clone() }).await;
             }
         }
     }
 
     /// attach a QBI to the master
-    pub async fn attach_qbi<C, F, T>(
-        &mut self,
-        id: impl Into<QBID>,
-        init: F,
-        // bridge: Box<dyn Fn(String) -> Box<dyn Any + Sync + Send + 'static>>,
-        cx: C,
-    ) where
+    pub async fn attach<C, F, T>(&mut self, id: impl Into<QBID>, init: F, cx: C)
+    where
         C: Sync + Send + 'static,
         T: interface::QBI<C>,
         F: FnOnce(C, QBICommunication) -> T + std::marker::Send + 'static,
@@ -170,33 +166,40 @@ impl QB {
         let (main_tx, qbi_rx) = tokio::sync::mpsc::channel::<QBMessage>(32);
         let (qbi_tx, main_rx) = tokio::sync::mpsc::channel::<QBIMessage>(32);
 
-        // let some = tokio::sync::oneshot::channel::<Message>(); // could be used for file transfer
+        self.handles.insert(
+            id.clone(),
+            QBIHandle {
+                syncing: false,
+                join_handle: std::thread::spawn(move || {
+                    let span = span!(Level::INFO, "qbi", "id" = id.0);
+                    let _guard = span.enter();
+                    init(
+                        cx,
+                        QBICommunication {
+                            rx: qbi_rx,
+                            tx: qbi_tx,
+                        },
+                    )
+                    .run()
+                }),
+                tx: main_tx,
+                rx: main_rx,
+            },
+        );
+    }
 
-        self.handles.push(QBIHandle {
-            syncing: false,
-            id: id.clone(),
-            join_handle: std::thread::spawn(move || {
-                let span = span!(Level::INFO, "qbi", "id" = id.0);
-                let _guard = span.enter();
-                init(
-                    cx,
-                    QBICommunication {
-                        rx: qbi_rx,
-                        tx: qbi_tx,
-                    },
-                )
-                .run()
-            }),
-            tx: main_tx,
-            rx: main_rx,
-            // bridge,
-        });
+    /// detach the given interface and return a join handle
+    pub async fn detach(&mut self, id: &QBID) -> Option<std::thread::JoinHandle<()>> {
+        let handle = self.handles.remove(id)?;
+        handle.send(QBMessage::Stop).await;
+
+        Some(handle.join_handle)
     }
 
     /// synchronize changes across all QBIs
     pub async fn sync(&mut self) {
-        for handle in self.handles.iter_mut() {
-            let handle_common = self.fs.devices.get_common(&handle.id);
+        for (id, handle) in self.handles.iter_mut() {
+            let handle_common = self.fs.devices.get_common(&id);
 
             let changes = self.fs.changelog.after_cloned(handle_common).unwrap();
             if changes.is_empty() {
@@ -205,13 +208,11 @@ impl QB {
 
             handle.syncing = true;
             handle
-                .tx
-                .send(QBMessage::Sync {
+                .send(Message::Sync {
                     common: handle_common.clone(),
                     changes,
                 })
-                .await
-                .unwrap();
+                .await;
         }
     }
 }

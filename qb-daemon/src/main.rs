@@ -1,12 +1,12 @@
 use interprocess::local_socket::{
-    traits::tokio::Listener, GenericNamespaced, ListenerNonblockingMode, ListenerOptions, ToNsName,
+    GenericNamespaced, ListenerNonblockingMode, ListenerOptions, ToNsName,
 };
+use qb_control::qbi_local::{QBILocal, QBILocalInit};
 use std::{fs::File, sync::Arc, time::Duration};
 use tracing_panic::panic_hook;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 use qb_core::{interface::QBI, QB};
-use qbi_local::{QBILocal, QBILocalInit};
 
 #[tokio::main]
 async fn main() {
@@ -31,7 +31,7 @@ async fn main() {
 
     let name = "qb-daemon.sock";
     let name = name.to_ns_name::<GenericNamespaced>().unwrap();
-    let socket = ListenerOptions::new()
+    let _socket = ListenerOptions::new()
         .name(name)
         .nonblocking(ListenerNonblockingMode::Both)
         .create_tokio()
@@ -44,7 +44,7 @@ async fn main() {
     // Initialize the core library
     let mut qb = QB::init("./local").await;
 
-    qb.attach_qbi(
+    qb.attach(
         "local1",
         QBILocal::init,
         QBILocalInit {

@@ -9,5 +9,4 @@ interprocess = { version = "2.2.0", features = ["tokio"] }
 tracing-subscriber = "0.3.18"
 tracing-panic = "0.1.2"
 qb-core = { path = "../qb-core" }
-# qbi-rtc = { path = "../qbi-rtc" }
-qbi-local = { path = "../qbi-local" }
+qb-control = { path = "../qb-control" }

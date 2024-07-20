@@ -4,15 +4,14 @@
 
 pub mod protocol;
 
-use std::{
-    collections::HashMap,
-    hash::{DefaultHasher, Hash, Hasher},
-};
+use std::collections::HashMap;
 
 use bitcode::{Decode, Encode};
-use lazy_static::lazy_static;
 
-use crate::{change::QB_CHANGELOG_BASE, common::hash::QBHash};
+use crate::{
+    change::QB_CHANGELOG_BASE,
+    common::{hash::QBHash, id::QBID},
+};
 use protocol::{QBIMessage, QBMessage};
 
 /// trait which all quixbyte interfaces need to implement
@@ -24,23 +23,6 @@ pub trait QBI<T> {
     fn init(cx: T, com: QBICommunication) -> Self;
     /// main loop
     fn run(self);
-}
-
-/// struct which represents an id from a specific QBI connection
-#[derive(Encode, Decode, Debug, Clone, Default, Eq, PartialEq, Hash)]
-pub struct QBID(pub(crate) u64);
-
-impl From<&str> for QBID {
-    fn from(value: &str) -> Self {
-        let mut hasher = DefaultHasher::new();
-        value.hash(&mut hasher);
-        QBID(hasher.finish())
-    }
-}
-
-lazy_static! {
-    /// the default id
-    pub static ref QBID_DEFAULT: QBID = QBID::default();
 }
 
 /// struct that stores common changes and names for all connections
@@ -83,37 +65,13 @@ pub struct QBICommunication {
 }
 
 impl QBICommunication {
-    // #[deprecated = "use-case unknown"]
-    // pub async fn bridge_request_async<T>(&mut self, key: String) -> T
-    // where
-    //     T: 'static,
-    // {
-    //     self.tx
-    //         .send(QBIMessage::BridgeRequest { key })
-    //         .await
-    //         .expect("Could not send request!");
-    //     let resp = self.rx.recv().await.expect("Could not receive response!");
-    //     match resp {
-    //         HostMessage::BridgeRequest { val } => *val.downcast::<T>().expect("Type mismatch"),
-    //         _ => panic!("Received response of wrong type!"),
-    //     }
-    // }
+    /// TODO: doc
+    pub async fn send(&self, msg: impl Into<QBIMessage>) {
+        self.tx.send(msg.into()).await.unwrap()
+    }
 
-    // #[deprecated = "use-case unknown"]
-    // pub fn bridge_request<T>(&mut self, key: String) -> T
-    // where
-    //     T: 'static,
-    // {
-    //     self.tx
-    //         .blocking_send(QBIMessage::BridgeRequest { key })
-    //         .expect("Could not send request!");
-    //     let resp = self
-    //         .rx
-    //         .blocking_recv()
-    //         .expect("Could not receive response!");
-    //     match resp {
-    //         HostMessage::BridgeRequest { val } => *val.downcast::<T>().expect("Type mismatch"),
-    //         _ => panic!("Received response of wrong type!"),
-    //     }
-    // }
+    /// TODO: doc
+    pub fn blocking_send(&self, msg: impl Into<QBIMessage>) {
+        self.tx.blocking_send(msg.into()).unwrap()
+    }
 }

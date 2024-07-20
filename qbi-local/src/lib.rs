@@ -4,23 +4,26 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use bitcode::{Decode, Encode};
 use notify::{
     event::{AccessKind, AccessMode, CreateKind, ModifyKind, RemoveKind, RenameMode},
     Event, EventKind, RecursiveMode, Watcher,
 };
 use qb_core::{
     change::{log::QBChangelog, transaction::QBTransaction, QBChange, QBChangeKind},
+    common::id::QBID_DEFAULT,
     fs::{QBFileDiff, QBFS},
     interface::{
-        protocol::{QBIMessage, QBMessage},
-        QBICommunication, QBID_DEFAULT,
+        protocol::{Message, QBMessage},
+        QBICommunication,
     },
 };
 use qb_derive::QBIAsync;
 use tracing::{debug, info};
 
+#[derive(Encode, Decode)]
 pub struct QBILocalInit {
-    pub path: PathBuf,
+    pub path: String,
 }
 
 #[derive(QBIAsync)]
@@ -37,12 +40,10 @@ impl QBILocal {
     async fn init_async(cx: QBILocalInit, com: QBICommunication) -> Self {
         let fs = QBFS::init(cx.path).await;
 
-        com.tx
-            .send(QBIMessage::Common {
-                common: fs.devices.get_common(&QBID_DEFAULT).clone(),
-            })
-            .await
-            .unwrap();
+        com.send(Message::Common {
+            common: fs.devices.get_common(&QBID_DEFAULT).clone(),
+        })
+        .await;
 
         Self {
             syncing: false,
@@ -53,15 +54,15 @@ impl QBILocal {
         }
     }
 
-    async fn on_remote(&mut self, msg: QBMessage) {
+    async fn on_message(&mut self, msg: Message) {
         info!("recv {}", msg);
 
         match msg {
-            QBMessage::Common { common } => {
+            Message::Common { common } => {
                 self.fs.devices.set_common(&QBID_DEFAULT, common);
                 self.fs.save_devices().await.unwrap();
             }
-            QBMessage::Sync { common, changes } => {
+            Message::Sync { common, changes } => {
                 assert!(self.fs.devices.get_common(&QBID_DEFAULT).clone() == common);
 
                 let local_entries = self.fs.changelog.after(&common).unwrap();
@@ -87,13 +88,11 @@ impl QBILocal {
                 // Send sync to remote
                 if !self.syncing {
                     self.com
-                        .tx
-                        .send(QBIMessage::Sync {
+                        .send(Message::Sync {
                             common,
                             changes: local_entries,
                         })
-                        .await
-                        .unwrap();
+                        .await;
                 }
 
                 self.syncing = false;
@@ -101,7 +100,7 @@ impl QBILocal {
                 // save the changes applied
                 self.fs.save().await.unwrap();
             }
-            QBMessage::Broadcast { msg } => println!("BROADCAST: {}", msg),
+            Message::Broadcast { msg } => println!("BROADCAST: {}", msg),
         }
     }
 
@@ -190,13 +189,11 @@ impl QBILocal {
 
         // notify remote
         self.com
-            .tx
-            .send(QBIMessage::Sync {
+            .send(Message::Sync {
                 common: self.fs.devices.get_common(&QBID_DEFAULT).clone(),
                 changes: std::mem::take(&mut changes),
             })
-            .await
-            .unwrap();
+            .await;
     }
 
     async fn run_async(mut self) {
@@ -217,7 +214,10 @@ impl QBILocal {
             //let msg = self.com.rx.recv().await.unwrap();
             tokio::select! {
                 Some(msg) = self.com.rx.recv() => {
-                    self.on_remote(msg).await;
+                    match msg {
+                        QBMessage::Message(msg) => self.on_message(msg).await,
+                        QBMessage::Stop => break
+                    }
                 },
                 Some(Ok(event)) = rx.recv() => {
                     self.on_watcher(event).await;
@@ -228,7 +228,6 @@ impl QBILocal {
                 _ = tokio::time::sleep(Duration::from_secs(1)), if !self.watcher_skip.is_empty() => {
                     self.watcher_skip.clear();
                 },
-                // TODO: sync response timeout
             };
         }
     }

@@ -1,0 +1,10 @@
+[package]
+name = "qb-control"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+bitcode = "0.6.0"
+qb-core = { path = "../qb-core" }
+# qbi-rtc = { path = "../qbi-rtc" }
+qbi-local = { path = "../qbi-local" }

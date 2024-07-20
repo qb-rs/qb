@@ -3,11 +3,13 @@
 
 use core::fmt;
 
+use bitcode::{Decode, Encode};
+
 use crate::{change::QBChange, common::hash::QBHash};
 
-/// a message coming from the QBI
-#[derive(Debug, Clone)]
-pub enum QBIMessage {
+/// a message
+#[derive(Debug, Clone, Encode, Decode)]
+pub enum Message {
     /// broadcast a message
     Broadcast {
         /// message to broadcast
@@ -28,10 +30,10 @@ pub enum QBIMessage {
     },
 }
 
-impl fmt::Display for QBIMessage {
+impl fmt::Display for Message {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
-            QBIMessage::Sync {
+            Message::Sync {
                 common,
                 changes: entries,
             } => {
@@ -42,59 +44,37 @@ impl fmt::Display for QBIMessage {
                 }
                 Ok(())
             }
-            QBIMessage::Common { common } => {
+            Message::Common { common } => {
                 write!(f, "MSG_COMMON {}", common)
             }
-            QBIMessage::Broadcast { msg } => {
+            Message::Broadcast { msg } => {
                 write!(f, "MSG_BROADCAST {}", msg)
             }
         }
     }
 }
+
+impl Into<QBIMessage> for Message {
+    fn into(self) -> QBIMessage {
+        QBIMessage(self)
+    }
+}
+
+impl Into<QBMessage> for Message {
+    fn into(self) -> QBMessage {
+        QBMessage::Message(self)
+    }
+}
+
+/// a message coming from the QBI
+#[derive(Debug, Clone)]
+pub struct QBIMessage(pub Message);
 
 /// a message coming from the master
 #[derive(Debug, Clone)]
 pub enum QBMessage {
-    /// broadcast a message
-    Broadcast {
-        /// message to broadcast
-        msg: String,
-    },
-    /// exchange the common change, sent when newest common
-    /// change gets updated (synchronization)
-    Common {
-        /// hash that points to the common change
-        common: QBHash,
-    },
-    /// synchronize
-    Sync {
-        /// the common hash that was used for creating the changes vector
-        common: QBHash,
-        /// a vector describing the changes
-        changes: Vec<QBChange>,
-    },
-}
-
-impl fmt::Display for QBMessage {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match &self {
-            QBMessage::Sync {
-                common,
-                changes: entries,
-            } => {
-                writeln!(f, "MSG_SYNC common: {}", common)?;
-                for entry in entries {
-                    fmt::Display::fmt(entry, f)?;
-                    writeln!(f)?;
-                }
-                Ok(())
-            }
-            QBMessage::Common { common } => {
-                write!(f, "MSG_COMMON {}", common)
-            }
-            QBMessage::Broadcast { msg } => {
-                write!(f, "MSG_BROADCAST {}", msg)
-            }
-        }
-    }
+    /// message
+    Message(Message),
+    /// stop the QBI
+    Stop,
 }

@@ -535,6 +535,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "qb-control"
+version = "0.1.0"
+dependencies = [
+ "bitcode",
+ "qb-core",
+ "qbi-local",
+]
+
+[[package]]
 name = "qb-core"
 version = "0.1.0"
 dependencies = [
@@ -558,8 +567,8 @@ name = "qb-daemon"
 version = "0.1.0"
 dependencies = [
  "interprocess",
+ "qb-control",
  "qb-core",
- "qbi-local",
  "tokio",
  "tracing-panic",
  "tracing-subscriber",
