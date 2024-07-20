@@ -95,7 +95,7 @@ impl QB {
         let mut broadcast = Vec::new();
         self.clean_handles();
         for (id, handle) in self.handles.iter_mut() {
-            let span = span!(Level::INFO, "qbi-process", id = id.to_string());
+            let span = span!(Level::INFO, "qbi-process", id = id.to_hex());
             let _guard = span.enter();
 
             let handle_common = self.fs.devices.get_common(&id);
