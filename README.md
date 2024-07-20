@@ -25,7 +25,7 @@ something meaningful once or twice and then get in touch.
 2. [Platform Support](#platform-support)
 3. [QBI Support](#qbi-support)
 4. [Quickstart](#quickstart)
-5. [Termology](#termology)
+5. [Terminology](#termology)
 
 ----
 
@@ -33,8 +33,8 @@ something meaningful once or twice and then get in touch.
 
 - Fast, resilient sync
 - Low resource usage
-- Support of many different [storage services](#termology-storage-service)
-- Extensibility, allow external processes to act as [QBI](#termology-interface)s
+- Support of many different [storage services](#terminology-storage-service)
+- Extensibility, allow external processes to act as [QBI](#terminology-interface)s
 - Wide platform support
 - Entirely opensource
 
@@ -89,19 +89,19 @@ $ cargo run --bin qb-app
 
 ----
 
-# Termology
+# Terminology
 
-<h2 id="termology-interface">interface</h2>
+<h2 id="terminology-interface">interface</h2>
 
-A QBI (quixbyte interface) is a piece of software which helps the [master](#termology-master)
-to communicate with some [storage service](#termology-storage-service).
+A QBI (quixbyte interface) is a piece of software which helps the [master](#terminology-master)
+to communicate with some [storage service](#terminology-storage-service).
 
-<h2 id="termology-master">master</h2>
+<h2 id="terminology-master">master</h2>
 
-The master controls which [QBI](#termology-interface)s to attach to and handles the communication
+The master controls which [QBI](#terminology-interface)s to attach to and handles the communication
 between the different interfaces.
 
-<h2 id="termology-storage-service">storage service</h2>
+<h2 id="terminology-storage-service">storage service</h2>
 
 A storage service is an entity that we can communicate with to store and read files.
 
