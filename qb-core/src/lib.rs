@@ -8,7 +8,6 @@ use std::{
     path::Path,
     task::{Context, Poll, Waker},
     thread::JoinHandle,
-    time::Duration,
 };
 
 use tokio::sync::mpsc;
@@ -19,7 +18,7 @@ use change::log::QBChangelog;
 use common::id::QBID;
 use fs::QBFS;
 use interface::{
-    protocol::{Message, QBIMessage, QBMessage},
+    protocol::{BridgeMessage, Message, QBIMessage, QBMessage},
     QBICommunication,
 };
 
@@ -32,7 +31,6 @@ struct QBIHandle {
     join_handle: JoinHandle<()>,
     tx: mpsc::Sender<QBMessage>,
     rx: mpsc::Receiver<QBIMessage>,
-    pool: Vec<QBIMessage>,
     syncing: bool,
 }
 
@@ -49,6 +47,7 @@ pub struct QB {
     handles: HashMap<QBID, QBIHandle>,
     noop: Waker,
     fs: QBFS,
+    bridge_recv_pool: Vec<BridgeMessage>,
 }
 
 impl QB {
@@ -61,8 +60,18 @@ impl QB {
         QB {
             noop: waker_fn(|| {}),
             handles: HashMap::new(),
+            bridge_recv_pool: Vec::new(),
             fs,
         }
+    }
+
+    /// poll a bridge message
+    pub fn poll_bridge_recv(&mut self) -> Option<BridgeMessage> {
+        if self.bridge_recv_pool.is_empty() {
+            return None;
+        }
+
+        Some(self.bridge_recv_pool.swap_remove(0))
     }
 
     /// remove unused handles [from QBIs that have finished]
@@ -86,7 +95,7 @@ impl QB {
         let mut broadcast = Vec::new();
         self.clean_handles();
         for (id, handle) in self.handles.iter_mut() {
-            let span = span!(Level::INFO, "qbi-process", id = id.0);
+            let span = span!(Level::INFO, "qbi-process", id = id.to_string());
             let _guard = span.enter();
 
             let handle_common = self.fs.devices.get_common(&id);
@@ -105,16 +114,12 @@ impl QB {
             }
 
             let poll = handle.rx.poll_recv(&mut Context::from_waker(&self.noop));
-            if let Poll::Ready(Some(msg)) = poll {
-                handle.pool.push(msg);
-            }
-
-            while let Some(QBIMessage(msg)) = handle.pool.pop() {
+            if let Poll::Ready(Some(QBIMessage(msg))) = poll {
                 info!("recv: {}", msg);
 
                 match msg {
                     Message::Sync { common, changes } => {
-                        assert!(self.fs.devices.get_common(&id) == &common);
+                        assert!(handle_common == &common);
 
                         let local_entries = self.fs.changelog.after(&common).unwrap();
 
@@ -148,8 +153,8 @@ impl QB {
                         self.fs.save_devices().await.unwrap();
                     }
                     Message::Broadcast { msg } => broadcast.push(msg),
-                    Message::Bridge { .. } => {
-                        warn!("unhandled bridge response!");
+                    Message::Bridge(bridge) => {
+                        self.bridge_recv_pool.push(bridge);
                     }
                 }
             }
@@ -189,7 +194,6 @@ impl QB {
                     )
                     .run()
                 }),
-                pool: Vec::new(),
                 tx: main_tx,
                 rx: main_rx,
             },
@@ -224,22 +228,9 @@ impl QB {
         }
     }
 
-    /// perform a bridge request
-    pub async fn bridge(&mut self, id: &QBID, msg: Vec<u8>) -> Option<Vec<u8>> {
-        let handle = self.handles.get_mut(id)?;
-        handle.send(Message::Bridge { msg }).await;
-
-        loop {
-            match tokio::time::timeout(Duration::from_secs(2), handle.rx.recv()).await {
-                Ok(Some(QBIMessage(Message::Bridge { msg }))) => {
-                    return Some(msg);
-                }
-                Ok(Some(msg)) => {
-                    handle.pool.push(msg);
-                }
-                Ok(None) => {}
-                Err(_) => return None,
-            }
-        }
+    /// send a message to a QBI with the given id
+    pub async fn send(&self, id: &QBID, msg: impl Into<QBMessage>) {
+        // TODO: error handling
+        self.handles.get(id).unwrap().send(msg).await
     }
 }

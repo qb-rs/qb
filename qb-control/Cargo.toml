@@ -5,6 +5,7 @@ edition.workspace = true
 
 [dependencies]
 bitcode = "0.6.0"
+simdutf8 = "0.1.4"
 qb-core = { path = "../qb-core" }
 # qbi-rtc = { path = "../qbi-rtc" }
 qbi-local = { path = "../qbi-local" }

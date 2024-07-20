@@ -14,7 +14,7 @@ use qb_core::{
     common::id::QBID_DEFAULT,
     fs::{QBFileDiff, QBFS},
     interface::{
-        protocol::{Message, QBMessage},
+        protocol::{BridgeMessage, Message, QBMessage},
         QBICommunication,
     },
 };
@@ -101,7 +101,14 @@ impl QBILocal {
                 self.fs.save().await.unwrap();
             }
             Message::Broadcast { msg } => println!("BROADCAST: {}", msg),
-            Message::Bridge { .. } => self.com.send(Message::Bridge { msg: Vec::new() }).await,
+            Message::Bridge(BridgeMessage { caller, .. }) => {
+                self.com
+                    .send(Message::Bridge(BridgeMessage {
+                        caller,
+                        msg: Vec::new(),
+                    }))
+                    .await
+            }
         }
     }
 

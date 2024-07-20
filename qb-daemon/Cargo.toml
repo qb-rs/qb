@@ -4,9 +4,11 @@ version.workspace = true
 edition.workspace = true
 
 [dependencies]
+bitcode = "0.6.0"
 tokio = { version = "1.37.0", features = ["rt", "sync"] }
 interprocess = { version = "2.2.0", features = ["tokio"] }
 tracing-subscriber = "0.3.18"
 tracing-panic = "0.1.2"
+tracing = "0.1.40"
 qb-core = { path = "../qb-core" }
 qb-control = { path = "../qb-control" }

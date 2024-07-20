@@ -5,7 +5,25 @@ use core::fmt;
 
 use bitcode::{Decode, Encode};
 
-use crate::{change::QBChange, common::hash::QBHash};
+use crate::{
+    change::QBChange,
+    common::{hash::QBHash, id::QBID},
+};
+
+/// a bridge message
+#[derive(Debug, Clone, Encode, Decode)]
+pub struct BridgeMessage {
+    /// the id of the caller
+    pub caller: QBID,
+    /// the message
+    pub msg: Vec<u8>,
+}
+
+impl Into<Message> for BridgeMessage {
+    fn into(self) -> Message {
+        Message::Bridge(self)
+    }
+}
 
 /// a message
 #[derive(Debug, Clone, Encode, Decode)]
@@ -30,10 +48,7 @@ pub enum Message {
     },
     /// allows the process connected to the
     /// master to communicate with the qbi
-    Bridge {
-        /// the message
-        msg: Vec<u8>,
-    },
+    Bridge(BridgeMessage),
 }
 
 impl fmt::Display for Message {
@@ -56,10 +71,11 @@ impl fmt::Display for Message {
             Message::Broadcast { msg } => {
                 write!(f, "MSG_BROADCAST {}", msg)
             }
-            Message::Bridge { msg } => {
+            Message::Bridge(BridgeMessage { caller: id, msg }) => {
                 write!(
                     f,
-                    "MSG_BRIDGE {}",
+                    "MSG_BRIDGE from {}: {}",
+                    id,
                     simdutf8::basic::from_utf8(msg).unwrap_or("binary data")
                 )
             }
