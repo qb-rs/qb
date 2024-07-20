@@ -8,10 +8,11 @@ use std::{
     path::Path,
     task::{Context, Poll, Waker},
     thread::JoinHandle,
+    time::Duration,
 };
 
 use tokio::sync::mpsc;
-use tracing::{info, span, Level};
+use tracing::{info, span, warn, Level};
 use waker_fn::waker_fn;
 
 use change::log::QBChangelog;
@@ -31,8 +32,8 @@ struct QBIHandle {
     join_handle: JoinHandle<()>,
     tx: mpsc::Sender<QBMessage>,
     rx: mpsc::Receiver<QBIMessage>,
+    pool: Vec<QBIMessage>,
     syncing: bool,
-    // bridge: Box<dyn Fn(String) -> Box<dyn Any + Sync + Send + 'static>>,
 }
 
 impl QBIHandle {
@@ -104,13 +105,16 @@ impl QB {
             }
 
             let poll = handle.rx.poll_recv(&mut Context::from_waker(&self.noop));
+            if let Poll::Ready(Some(msg)) = poll {
+                handle.pool.push(msg);
+            }
 
-            if let Poll::Ready(Some(QBIMessage(msg))) = poll {
+            while let Some(QBIMessage(msg)) = handle.pool.pop() {
                 info!("recv: {}", msg);
 
                 match msg {
                     Message::Sync { common, changes } => {
-                        assert!(handle_common == &common);
+                        assert!(self.fs.devices.get_common(&id) == &common);
 
                         let local_entries = self.fs.changelog.after(&common).unwrap();
 
@@ -144,6 +148,9 @@ impl QB {
                         self.fs.save_devices().await.unwrap();
                     }
                     Message::Broadcast { msg } => broadcast.push(msg),
+                    Message::Bridge { .. } => {
+                        warn!("unhandled bridge response!");
+                    }
                 }
             }
         }
@@ -182,6 +189,7 @@ impl QB {
                     )
                     .run()
                 }),
+                pool: Vec::new(),
                 tx: main_tx,
                 rx: main_rx,
             },
@@ -213,6 +221,25 @@ impl QB {
                     changes,
                 })
                 .await;
+        }
+    }
+
+    /// perform a bridge request
+    pub async fn bridge(&mut self, id: &QBID, msg: Vec<u8>) -> Option<Vec<u8>> {
+        let handle = self.handles.get_mut(id)?;
+        handle.send(Message::Bridge { msg }).await;
+
+        loop {
+            match tokio::time::timeout(Duration::from_secs(2), handle.rx.recv()).await {
+                Ok(Some(QBIMessage(Message::Bridge { msg }))) => {
+                    return Some(msg);
+                }
+                Ok(Some(msg)) => {
+                    handle.pool.push(msg);
+                }
+                Ok(None) => {}
+                Err(_) => return None,
+            }
         }
     }
 }

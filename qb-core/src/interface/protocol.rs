@@ -28,6 +28,12 @@ pub enum Message {
         /// a vector describing the changes
         changes: Vec<QBChange>,
     },
+    /// allows the process connected to the
+    /// master to communicate with the qbi
+    Bridge {
+        /// the message
+        msg: Vec<u8>,
+    },
 }
 
 impl fmt::Display for Message {
@@ -49,6 +55,13 @@ impl fmt::Display for Message {
             }
             Message::Broadcast { msg } => {
                 write!(f, "MSG_BROADCAST {}", msg)
+            }
+            Message::Bridge { msg } => {
+                write!(
+                    f,
+                    "MSG_BRIDGE {}",
+                    simdutf8::basic::from_utf8(msg).unwrap_or("binary data")
+                )
             }
         }
     }

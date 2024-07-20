@@ -4,15 +4,21 @@ use bitcode::{Decode, Encode};
 use qb_core::{common::id::QBID, interface::QBI, QB};
 use qbi_local::{QBILocal, QBILocalInit};
 
-// re-export the initialzation primitives
+// re-export qbis
 pub use qbi_local;
 
 pub trait ProcessQBControlRequest {
-    fn process(&mut self, request: QBControlRequest) -> impl Future<Output = ()>;
+    fn process(
+        &mut self,
+        request: QBControlRequest,
+    ) -> impl Future<Output = Option<QBControlResponse>>;
 }
 
 impl ProcessQBControlRequest for QB {
-    fn process(&mut self, request: QBControlRequest) -> impl Future<Output = ()> {
+    fn process(
+        &mut self,
+        request: QBControlRequest,
+    ) -> impl Future<Output = Option<QBControlResponse>> {
         request.process_to(self)
     }
 }
@@ -21,31 +27,6 @@ impl ProcessQBControlRequest for QB {
 #[derive(Encode, Decode)]
 pub enum QBIInit {
     Local(QBILocalInit),
-}
-
-/// An attach request
-#[derive(Encode, Decode)]
-pub struct QBIAttach {
-    id: QBID,
-    init: QBIInit,
-}
-
-impl Into<QBControlRequest> for QBIAttach {
-    fn into(self) -> QBControlRequest {
-        QBControlRequest::Attach(self)
-    }
-}
-
-/// A detach request
-#[derive(Encode, Decode)]
-pub struct QBIDetach {
-    id: QBID,
-}
-
-impl Into<QBControlRequest> for QBIDetach {
-    fn into(self) -> QBControlRequest {
-        QBControlRequest::Detach(self)
-    }
 }
 
 impl QBIInit {
@@ -59,15 +40,42 @@ impl QBIInit {
 
 #[derive(Encode, Decode)]
 pub enum QBControlRequest {
-    Attach(QBIAttach),
-    Detach(QBIDetach),
+    Attach {
+        id: QBID,
+        init: QBIInit,
+    },
+    Detach {
+        id: QBID,
+    },
+    /// Talk to the QBI
+    Bridge {
+        id: QBID,
+        msg: Vec<u8>,
+    },
+}
+
+#[derive(Encode, Decode)]
+pub enum QBControlResponse {
+    // TODO: attach/detach success/error
+    Bridge { id: QBID, msg: Vec<u8> },
 }
 
 impl QBControlRequest {
-    pub async fn process_to(self, qb: &mut QB) {
+    pub async fn process_to(self, qb: &mut QB) -> Option<QBControlResponse> {
+        // TODO: error handling
         match self {
-            QBControlRequest::Attach(attach) => attach.init.attach_to(qb, attach.id).await,
-            QBControlRequest::Detach(detach) => _ = qb.detach(&detach.id),
+            QBControlRequest::Attach { init, id } => {
+                init.attach_to(qb, id).await;
+                None
+            }
+            QBControlRequest::Detach { id } => {
+                qb.detach(&id).await.unwrap().join().unwrap();
+                None
+            }
+            QBControlRequest::Bridge { id, msg } => Some(QBControlResponse::Bridge {
+                msg: qb.bridge(&id, msg).await.unwrap(),
+                id,
+            }),
         }
     }
 }

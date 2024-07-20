@@ -101,6 +101,7 @@ impl QBILocal {
                 self.fs.save().await.unwrap();
             }
             Message::Broadcast { msg } => println!("BROADCAST: {}", msg),
+            Message::Bridge { .. } => self.com.send(Message::Bridge { msg: Vec::new() }).await,
         }
     }
 
