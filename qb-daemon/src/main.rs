@@ -1,8 +1,14 @@
+// TODO: convert to struct
+
 use interprocess::local_socket::{
-    traits::tokio::Listener, GenericNamespaced, ListenerNonblockingMode, ListenerOptions, ToNsName,
+    tokio::Stream, traits::tokio::Listener, GenericNamespaced, ListenerNonblockingMode,
+    ListenerOptions, ToNsName,
 };
 use std::{collections::HashMap, fs::File, sync::Arc, time::Duration};
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    sync::mpsc,
+};
 use tracing::{info, span, Level};
 use tracing_panic::panic_hook;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
@@ -19,9 +25,9 @@ struct Handle {
 
 struct HandleInit {
     id: QBID,
-    conn: interprocess::local_socket::tokio::Stream,
-    tx: tokio::sync::mpsc::Sender<(QBID, QBControlRequest)>,
-    rx: tokio::sync::mpsc::Receiver<QBControlResponse>,
+    conn: Stream,
+    tx: mpsc::Sender<(QBID, QBControlRequest)>,
+    rx: mpsc::Receiver<QBControlResponse>,
 }
 
 #[tokio::main]
@@ -89,7 +95,6 @@ async fn main() {
             Some((caller, msg)) = req_rx.recv() => {
                 qb.process(caller, msg).await;
             }
-            // TODO: process socket
             Ok(conn) = socket.accept() => {
                 let id = QBID::generate();
                 let (resp_tx, resp_rx) = tokio::sync::mpsc::channel::<QBControlResponse>(10);
@@ -115,7 +120,7 @@ const LEN_SIZE: usize = std::mem::size_of::<LEN>();
 const READ_SIZE: usize = 64;
 
 async fn handle_run(mut init: HandleInit) {
-    let span = span!(Level::INFO, "handle", id = init.id.to_string());
+    let span = span!(Level::INFO, "handle", id = init.id.to_hex());
     let _guard = span.enter();
 
     info!("create new handle with id={} conn={:?}", init.id, init.conn);
@@ -143,7 +148,8 @@ async fn handle_run(mut init: HandleInit) {
                 // write a message to the socket
                 info!("send {}", response);
                 let contents = bitcode::encode(&response);
-                init.conn.write(&contents.len().to_be_bytes()).await.unwrap();
+                let contents_len = contents.len() as LEN;
+                init.conn.write(&contents_len.to_be_bytes()).await.unwrap();
                 init.conn.write(&contents).await.unwrap();
             }
             Ok(len) = init.conn.read(&mut read_bytes) => {

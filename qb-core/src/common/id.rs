@@ -6,6 +6,7 @@ use std::{
 };
 
 use bitcode::{Decode, Encode};
+use hex::FromHexError;
 use lazy_static::lazy_static;
 use rand::Rng;
 
@@ -23,7 +24,7 @@ impl From<&str> for QBID {
 
 impl fmt::Display for QBID {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_string())
+        write!(f, "{}", self.to_hex())
     }
 }
 
@@ -41,10 +42,16 @@ impl QBID {
     }
 
     /// Get the string representation of this id in hex format
-    pub fn to_string(&self) -> String {
-        let id_vec = vec![self.0];
-        let id_bytes = unsafe { id_vec.align_to::<u8>() }.1;
+    pub fn to_hex(&self) -> String {
+        let id_bytes = self.0.to_be_bytes();
         hex::encode(id_bytes)
+    }
+
+    /// Decode a hexadecimal string to an id
+    pub fn from_hex(hex: impl AsRef<str>) -> Result<Self, FromHexError> {
+        let mut id_bytes: [u8; 8] = [0; 8];
+        hex::decode_to_slice(hex.as_ref(), &mut id_bytes)?;
+        Ok(Self(u64::from_be_bytes(id_bytes)))
     }
 }
 
