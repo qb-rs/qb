@@ -9,7 +9,7 @@ use tokio::{
     sync::mpsc,
     task::{AbortHandle, JoinSet},
 };
-use tracing::{info, span, warn, Level};
+use tracing::{info, span, trace, warn, Level};
 
 use change::log::QBChangelog;
 use common::id::QBID;
@@ -164,7 +164,7 @@ impl QB {
         let handle = self.handles.get_mut(&id).unwrap();
         let handle_common = self.fs.devices.get_common(&id);
 
-        info!("recv: {}", msg);
+        trace!("recv: {}", msg);
 
         match msg {
             Message::Sync { common, changes } => {

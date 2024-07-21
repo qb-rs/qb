@@ -4,12 +4,12 @@ use interprocess::local_socket::{
     tokio::Stream, traits::tokio::Listener, GenericNamespaced, ListenerNonblockingMode,
     ListenerOptions, ToNsName,
 };
-use std::{collections::HashMap, fs::File, sync::Arc};
+use std::{collections::HashMap, fs::File, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     sync::mpsc,
 };
-use tracing::{info, span, Level};
+use tracing::{span, trace, Level};
 use tracing_panic::panic_hook;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
@@ -78,7 +78,7 @@ async fn main() {
     loop {
         tokio::select! {
             // process qbi
-            _ = qb.process_handles() => {
+            _ =  qb.process_handles() => {
                 if let Some(response) = qb.poll_bridge_recv() {
                     handles.get(&response.caller)
                         .unwrap()
@@ -118,15 +118,16 @@ const LEN_SIZE: usize = std::mem::size_of::<LEN>();
 const READ_SIZE: usize = 64;
 
 async fn handle_run(mut init: HandleInit) {
-    let span = span!(Level::INFO, "handle", id = init.id.to_hex());
-    let _guard = span.enter();
+    let span = span!(Level::TRACE, "handle", id = init.id.to_hex());
 
-    info!("create new handle with id={} conn={:?}", init.id, init.conn);
+    span.in_scope(|| {
+        trace!("create new handle with id={} conn={:?}", init.id, init.conn);
+    });
 
     let mut bytes = Vec::new();
 
     loop {
-        if bytes.len() > 8 {
+        if bytes.len() > LEN_SIZE {
             // read a message from the recv buffer
             let mut buf: [u8; LEN_SIZE] = [0; LEN_SIZE];
             buf.copy_from_slice(&bytes[0..LEN_SIZE]);
@@ -134,7 +135,9 @@ async fn handle_run(mut init: HandleInit) {
             if packet_len > buf.len() {
                 let packet = bytes.drain(0..packet_len).collect::<Vec<_>>();
                 let request = bitcode::decode::<QBControlRequest>(&packet[LEN_SIZE..]).unwrap();
-                info!("recv {}", request);
+                span.in_scope(|| {
+                    trace!("recv {}", request);
+                });
                 init.tx.send((init.id.clone(), request)).await.unwrap();
             }
         }
@@ -144,7 +147,9 @@ async fn handle_run(mut init: HandleInit) {
         tokio::select! {
             Some(response) = init.rx.recv() => {
                 // write a message to the socket
-                info!("send {}", response);
+                span.in_scope(|| {
+                    trace!("send {}", response);
+                });
                 let contents = bitcode::encode(&response);
                 let contents_len = contents.len() as LEN;
                 init.conn.write(&contents_len.to_be_bytes()).await.unwrap();
@@ -152,7 +157,9 @@ async fn handle_run(mut init: HandleInit) {
             }
             Ok(len) = init.conn.read(&mut read_bytes) => {
                 if len == 0 {
-                    info!("connection closed!");
+                    span.in_scope(|| {
+                        trace!("connection closed!");
+                    });
                     return;
                 }
 

@@ -19,7 +19,7 @@ use qb_core::{
     },
 };
 use qb_derive::QBIAsync;
-use tracing::{debug, info};
+use tracing::{debug, info, trace};
 
 #[derive(Encode, Decode)]
 pub struct QBILocalInit {
@@ -55,7 +55,7 @@ impl QBILocal {
     }
 
     async fn on_message(&mut self, msg: Message) {
-        info!("recv {}", msg);
+        trace!("recv {}", msg);
 
         match msg {
             Message::Common { common } => {
