@@ -1,8 +1,9 @@
+use core::panic;
 use std::{io::Read, time::Duration};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use interprocess::local_socket::{traits::tokio::Stream, GenericNamespaced, ToNsName};
-use qb_control::QBControlRequest;
+use qb_control::{QBControlRequest, QBControlResponse};
 use qb_core::common::id::QBID;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -23,7 +24,7 @@ enum Commands {
     /// Attach a QBI
     Attach {
         /// the id of the QBI in hex format
-        #[arg(value_parser=parse_id)]
+        #[arg(long="id", value_parser=parse_id)]
         id: QBID,
         /// the type of QBI
         kind: Kind,
@@ -31,13 +32,13 @@ enum Commands {
     /// Detach a QBI
     Detach {
         /// the id of the QBI in hex format
-        #[arg(value_parser=parse_id)]
+        #[arg(long="id", value_parser=parse_id)]
         id: QBID,
     },
     /// Send a message to a QBI
     Bridge {
         /// the id of the QBI in hex format
-        #[arg(value_parser=parse_id)]
+        #[arg(long="id", value_parser=parse_id)]
         id: QBID,
         /// the message (will read from stdin if left blank)
         msg: Option<String>,
@@ -56,6 +57,7 @@ fn parse_id(s: &str) -> Result<QBID, String> {
 
 type LEN = u64;
 const LEN_SIZE: usize = std::mem::size_of::<LEN>();
+const READ_SIZE: usize = 64;
 
 #[tokio::main]
 async fn main() {
@@ -72,13 +74,11 @@ async fn main() {
                 }
             };
             let req = QBControlRequest::Bridge { id, msg };
-            let contents = bitcode::encode(&req);
-            let contents_len = contents.len() as LEN;
             let mut conn = connect().await;
-            conn.write(&contents_len.to_be_bytes()).await.unwrap();
-            conn.write(&contents).await.unwrap();
+            write(&mut conn, req).await;
+            let res = read(&mut conn).await;
 
-            tokio::time::sleep(Duration::from_secs(1)).await;
+            println!("res: {}", res);
         }
         _ => unimplemented!(),
     };
@@ -98,4 +98,34 @@ async fn connect() -> TStream {
     println!("connected to daemon!");
 
     connection
+}
+
+async fn write(conn: &mut TStream, req: QBControlRequest) {
+    let contents = bitcode::encode(&req);
+    let contents_len = contents.len() as LEN;
+    conn.write(&contents_len.to_be_bytes()).await.unwrap();
+    conn.write(&contents).await.unwrap();
+}
+
+async fn read(conn: &mut TStream) -> QBControlResponse {
+    let mut bytes: Vec<u8> = Vec::new();
+    loop {
+        if bytes.len() > LEN_SIZE {
+            // read a message from the recv buffer
+            let mut buf: [u8; LEN_SIZE] = [0; LEN_SIZE];
+            buf.copy_from_slice(&bytes[0..LEN_SIZE]);
+            let packet_len = LEN_SIZE + LEN::from_be_bytes(buf) as usize;
+            if packet_len > buf.len() {
+                let packet = bytes.drain(0..packet_len).collect::<Vec<_>>();
+                return bitcode::decode::<QBControlResponse>(&packet[LEN_SIZE..]).unwrap();
+            }
+        }
+
+        let mut read_buf: [u8; READ_SIZE] = [0; READ_SIZE];
+        let size = conn.read(&mut read_buf).await.unwrap();
+        if size == 0 {
+            panic!("remote closed the connection while reading");
+        }
+        bytes.extend_from_slice(&read_buf[0..size]);
+    }
 }

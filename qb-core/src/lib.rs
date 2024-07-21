@@ -3,16 +3,13 @@
 //! [Github](https://github.com/qb-rs/qb)
 #![warn(missing_docs)]
 
-use std::{
-    collections::HashMap,
-    path::Path,
-    task::{Context, Poll, Waker},
-    thread::JoinHandle,
-};
+use std::{collections::HashMap, path::Path, thread::JoinHandle, time::Duration};
 
-use tokio::sync::mpsc;
+use tokio::{
+    sync::mpsc,
+    task::{AbortHandle, JoinSet},
+};
 use tracing::{info, span, warn, Level};
-use waker_fn::waker_fn;
 
 use change::log::QBChangelog;
 use common::id::QBID;
@@ -29,9 +26,15 @@ pub mod interface;
 
 struct QBIHandle {
     join_handle: JoinHandle<()>,
+    abort_handle: AbortHandle,
     tx: mpsc::Sender<QBMessage>,
-    rx: mpsc::Receiver<QBIMessage>,
     syncing: bool,
+}
+
+struct Recv {
+    id: QBID,
+    rx: mpsc::Receiver<QBIMessage>,
+    msg: Option<QBIMessage>,
 }
 
 impl QBIHandle {
@@ -45,8 +48,8 @@ impl QBIHandle {
 /// the master thread and the QBIs
 pub struct QB {
     handles: HashMap<QBID, QBIHandle>,
-    noop: Waker,
     fs: QBFS,
+    recv_pool: JoinSet<Recv>,
     bridge_recv_pool: Vec<BridgeMessage>,
 }
 
@@ -58,8 +61,8 @@ impl QB {
         let fs = QBFS::init(root).await;
 
         QB {
-            noop: waker_fn(|| {}),
             handles: HashMap::new(),
+            recv_pool: JoinSet::new(),
             bridge_recv_pool: Vec::new(),
             fs,
         }
@@ -86,6 +89,41 @@ impl QB {
         }
     }
 
+    /// Receive a message
+    async fn recv(&mut self) -> Option<(QBID, QBIMessage)> {
+        loop {
+            match self.recv_pool.join_next().await {
+                Some(Ok(Recv {
+                    id,
+                    mut rx,
+                    msg: Some(msg),
+                })) => {
+                    let handle = self.handles.get_mut(&id).unwrap();
+                    handle.abort_handle = self.recv_pool.spawn({
+                        let id = id.clone();
+                        async move {
+                            let msg = rx.recv().await;
+                            Recv { rx, msg, id }
+                        }
+                    });
+
+                    return Some((id, msg));
+                }
+                Some(Err(err)) if err.is_panic() => {
+                    std::panic::resume_unwind(err.into_panic());
+                }
+                None => {
+                    // no entry in join pool, delay to avoid high cpu usage
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                    return None;
+                }
+                _ => {
+                    // canceled, retry recv
+                }
+            }
+        }
+    }
+
     /// process the handles
     ///
     /// this will look for new messages from the QBIs and
@@ -94,6 +132,8 @@ impl QB {
     pub async fn process_handles(&mut self) {
         let mut broadcast = Vec::new();
         self.clean_handles();
+
+        // check for new changes. TODO: asyncify this
         for (id, handle) in self.handles.iter_mut() {
             let span = span!(Level::INFO, "qbi-process", id = id.to_hex());
             let _guard = span.enter();
@@ -112,51 +152,58 @@ impl QB {
                     })
                     .await;
             }
+        }
 
-            let poll = handle.rx.poll_recv(&mut Context::from_waker(&self.noop));
-            if let Poll::Ready(Some(QBIMessage(msg))) = poll {
-                info!("recv: {}", msg);
+        // process messages
+        let (id, msg) = match self.recv().await {
+            Some((id, QBIMessage(msg))) => (id, msg),
+            None => return,
+        };
+        let span = span!(Level::INFO, "qbi-process", id = id.to_hex());
+        let _guard = span.enter();
+        let handle = self.handles.get_mut(&id).unwrap();
+        let handle_common = self.fs.devices.get_common(&id);
 
-                match msg {
-                    Message::Sync { common, changes } => {
-                        assert!(handle_common == &common);
+        info!("recv: {}", msg);
 
-                        let local_entries = self.fs.changelog.after(&common).unwrap();
+        match msg {
+            Message::Sync { common, changes } => {
+                assert!(handle_common == &common);
 
-                        // Apply changes
-                        let (mut entries, fschanges) =
-                            QBChangelog::merge(local_entries.clone(), changes).unwrap();
-                        self.fs.changelog.append(&mut entries);
+                let local_entries = self.fs.changelog.after(&common).unwrap();
 
-                        let fschanges = self.fs.table.to_fschanges(fschanges);
-                        self.fs.apply_changes(fschanges).await.unwrap();
+                // Apply changes
+                let (mut entries, fschanges) =
+                    QBChangelog::merge(local_entries.clone(), changes).unwrap();
+                self.fs.changelog.append(&mut entries);
 
-                        let new_common = self.fs.changelog.head();
-                        self.fs.devices.set_common(&id, new_common);
+                let fschanges = self.fs.table.to_fschanges(fschanges);
+                self.fs.apply_changes(fschanges).await.unwrap();
 
-                        // Send sync to remote
-                        if !handle.syncing {
-                            handle
-                                .send(Message::Sync {
-                                    common,
-                                    changes: local_entries,
-                                })
-                                .await;
-                        }
+                let new_common = self.fs.changelog.head();
+                self.fs.devices.set_common(&id, new_common);
 
-                        handle.syncing = false;
-
-                        self.fs.save().await.unwrap();
-                    }
-                    Message::Common { common } => {
-                        self.fs.devices.set_common(&id, common);
-                        self.fs.save_devices().await.unwrap();
-                    }
-                    Message::Broadcast { msg } => broadcast.push(msg),
-                    Message::Bridge(bridge) => {
-                        self.bridge_recv_pool.push(bridge);
-                    }
+                // Send sync to remote
+                if !handle.syncing {
+                    handle
+                        .send(Message::Sync {
+                            common,
+                            changes: local_entries,
+                        })
+                        .await;
                 }
+
+                handle.syncing = false;
+
+                self.fs.save().await.unwrap();
+            }
+            Message::Common { common } => {
+                self.fs.devices.set_common(&id, common);
+                self.fs.save_devices().await.unwrap();
+            }
+            Message::Broadcast { msg } => broadcast.push(msg),
+            Message::Bridge(bridge) => {
+                self.bridge_recv_pool.push(bridge);
             }
         }
 
@@ -178,12 +225,22 @@ impl QB {
         let (main_tx, qbi_rx) = tokio::sync::mpsc::channel::<QBMessage>(32);
         let (qbi_tx, main_rx) = tokio::sync::mpsc::channel::<QBIMessage>(32);
 
+        // spawn receive task
+        let abort_handle = self.recv_pool.spawn({
+            let id = id.clone();
+            let mut rx = main_rx;
+            async move {
+                let msg = rx.recv().await;
+                Recv { rx, msg, id }
+            }
+        });
+
         self.handles.insert(
             id.clone(),
             QBIHandle {
                 syncing: false,
                 join_handle: std::thread::spawn(move || {
-                    let span = span!(Level::INFO, "qbi", "id" = id.0);
+                    let span = span!(Level::INFO, "qbi", "id" = id.to_hex());
                     let _guard = span.enter();
                     init(
                         cx,
@@ -194,8 +251,8 @@ impl QB {
                     )
                     .run()
                 }),
+                abort_handle,
                 tx: main_tx,
-                rx: main_rx,
             },
         );
     }

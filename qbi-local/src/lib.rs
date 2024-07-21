@@ -105,7 +105,7 @@ impl QBILocal {
                 self.com
                     .send(Message::Bridge(BridgeMessage {
                         caller,
-                        msg: Vec::new(),
+                        msg: "unimplemented".into(),
                     }))
                     .await
             }

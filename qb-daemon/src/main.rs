@@ -4,7 +4,7 @@ use interprocess::local_socket::{
     tokio::Stream, traits::tokio::Listener, GenericNamespaced, ListenerNonblockingMode,
     ListenerOptions, ToNsName,
 };
-use std::{collections::HashMap, fs::File, sync::Arc, time::Duration};
+use std::{collections::HashMap, fs::File, sync::Arc};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     sync::mpsc,
@@ -78,7 +78,7 @@ async fn main() {
     loop {
         tokio::select! {
             // process qbi
-            _ = async {
+            _ = qb.process_handles() => {
                 if let Some(response) = qb.poll_bridge_recv() {
                     handles.get(&response.caller)
                         .unwrap()
@@ -89,9 +89,7 @@ async fn main() {
                         .await
                         .unwrap();
                 }
-                qb.process_handles().await;
-                tokio::time::sleep(Duration::from_millis(100)).await;
-            } => {},
+            },
             Some((caller, msg)) = req_rx.recv() => {
                 qb.process(caller, msg).await;
             }
