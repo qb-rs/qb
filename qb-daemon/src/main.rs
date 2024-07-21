@@ -4,7 +4,7 @@ use interprocess::local_socket::{
     tokio::Stream, traits::tokio::Listener, GenericNamespaced, ListenerNonblockingMode,
     ListenerOptions, ToNsName,
 };
-use std::{collections::HashMap, fs::File, sync::Arc, time::Duration};
+use std::{collections::HashMap, fs::File, sync::Arc};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     sync::mpsc,
