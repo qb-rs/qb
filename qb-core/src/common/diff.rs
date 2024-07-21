@@ -58,7 +58,7 @@ impl QBDiff {
         let new = changes.new_slices();
         let ops = changes
             .ops()
-            .into_iter()
+            .iter()
             .map(|e| match e {
                 similar::DiffOp::Equal { len, .. } => QBDiffOp::Equal { len: *len },
                 similar::DiffOp::Delete { old_len, .. } => QBDiffOp::Delete { len: *old_len },
@@ -87,7 +87,7 @@ impl QBDiff {
         let old_hash = QBHash::compute(&old);
         assert!(self.old_hash == old_hash);
 
-        let old = old.split_inclusive("\n").collect::<Vec<_>>();
+        let old = old.split_inclusive('\n').collect::<Vec<_>>();
 
         let mut old_index = 0;
         let mut new = String::new();

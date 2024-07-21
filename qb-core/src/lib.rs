@@ -82,7 +82,8 @@ impl QB {
         let to_remove = self
             .handles
             .iter()
-            .filter_map(|(k, v)| v.join_handle.is_finished().then(|| k.clone()))
+            .filter(|(_, v)| v.join_handle.is_finished())
+            .map(|(k, _)| k.clone())
             .collect::<Vec<_>>();
         for id in to_remove {
             self.handles.remove(&id);
@@ -138,7 +139,7 @@ impl QB {
             let span = span!(Level::INFO, "qbi-process", id = id.to_hex());
             let _guard = span.enter();
 
-            let handle_common = self.fs.devices.get_common(&id);
+            let handle_common = self.fs.devices.get_common(id);
 
             // SYNCHRONIZE
             if !handle.syncing && handle_common != &self.fs.changelog.head() {
@@ -268,7 +269,7 @@ impl QB {
     /// synchronize changes across all QBIs
     pub async fn sync(&mut self) {
         for (id, handle) in self.handles.iter_mut() {
-            let handle_common = self.fs.devices.get_common(&id);
+            let handle_common = self.fs.devices.get_common(id);
 
             let changes = self.fs.changelog.after_cloned(handle_common).unwrap();
             if changes.is_empty() {

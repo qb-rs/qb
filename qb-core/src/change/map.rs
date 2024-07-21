@@ -34,14 +34,14 @@ impl QBChangeMap {
             .changes
             .into_values()
             .flatten()
-            .filter_map(|e| (!e.is_local).then(|| e.change))
+            .filter_map(|e| (!e.is_local).then_some(e.change))
             .collect::<Vec<_>>();
         Self::_sort(&mut entries);
         entries
     }
 
     #[inline]
-    fn _sort(entries: &mut Vec<QBChange>) {
+    fn _sort(entries: &mut [QBChange]) {
         entries.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
     }
 }

@@ -113,8 +113,8 @@ async fn main() {
     }
 }
 
-type LEN = u64;
-const LEN_SIZE: usize = std::mem::size_of::<LEN>();
+type Len = u64;
+const LEN_SIZE: usize = std::mem::size_of::<Len>();
 const READ_SIZE: usize = 64;
 
 async fn handle_run(mut init: HandleInit) {
@@ -131,7 +131,7 @@ async fn handle_run(mut init: HandleInit) {
             // read a message from the recv buffer
             let mut buf: [u8; LEN_SIZE] = [0; LEN_SIZE];
             buf.copy_from_slice(&bytes[0..LEN_SIZE]);
-            let packet_len = LEN_SIZE + LEN::from_be_bytes(buf) as usize;
+            let packet_len = LEN_SIZE + Len::from_be_bytes(buf) as usize;
             if packet_len > buf.len() {
                 let packet = bytes.drain(0..packet_len).collect::<Vec<_>>();
                 let request = bitcode::decode::<QBControlRequest>(&packet[LEN_SIZE..]).unwrap();
@@ -151,9 +151,9 @@ async fn handle_run(mut init: HandleInit) {
                     trace!("send {}", response);
                 });
                 let contents = bitcode::encode(&response);
-                let contents_len = contents.len() as LEN;
-                init.conn.write(&contents_len.to_be_bytes()).await.unwrap();
-                init.conn.write(&contents).await.unwrap();
+                let contents_len = contents.len() as Len;
+                write_buf(&mut init.conn, &contents_len.to_be_bytes()).await;
+                write_buf(&mut init.conn, &contents).await;
             }
             Ok(len) = init.conn.read(&mut read_bytes) => {
                 if len == 0 {
@@ -166,5 +166,12 @@ async fn handle_run(mut init: HandleInit) {
                 bytes.extend_from_slice(&read_bytes[0..len]);
             }
         }
+    }
+}
+
+async fn write_buf(conn: &mut Stream, buf: &[u8]) {
+    let mut written = 0;
+    while written < buf.len() {
+        written += conn.write(&buf[written..]).await.unwrap();
     }
 }

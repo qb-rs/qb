@@ -139,7 +139,7 @@ impl QBILocal {
             return;
         }
 
-        if self.watcher_skip.iter().find(|e| e == &fspath).is_some() {
+        if self.watcher_skip.iter().any(|e| e == fspath) {
             debug!("skip {:?}", resource);
             return;
         }

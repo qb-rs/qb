@@ -43,12 +43,12 @@ impl QBChangelog {
             current_ts = entry.timestamp;
         }
 
-        return true;
+        true
     }
 
     /// Push an entry to this changelog.
     pub fn push(&mut self, entry: QBChange) -> bool {
-        if self.0.iter().find(|e| e.hash() == entry.hash()).is_some() {
+        if self.0.iter().any(|e| e.hash() == entry.hash()) {
             return false;
         }
 
@@ -69,7 +69,7 @@ impl QBChangelog {
     /// This is exclusive, meaning it won't include the entry with the given hash.
     pub fn after_cloned(&self, hash: &QBHash) -> Option<Vec<QBChange>> {
         let index = self.0.iter().position(|e| e.hash() == hash)? + 1;
-        Some(self.0.iter().skip(index).map(|e| e.clone()).collect())
+        Some(self.0.iter().skip(index).cloned().collect())
     }
 
     /// Append entries to this changelog.

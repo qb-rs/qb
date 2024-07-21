@@ -20,7 +20,7 @@ impl fmt::Display for QBHash {
 
 impl fmt::Debug for QBHash {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "QBHash({})", hex::encode(&self.0))
+        write!(f, "QBHash({})", hex::encode(self.0))
     }
 }
 
@@ -41,6 +41,6 @@ impl QBHash {
     pub fn compute_mut(hash: &mut QBHash, contents: impl AsRef<[u8]>) {
         let mut hasher = Sha256::new();
         hasher.update(contents);
-        hasher.finalize_into(&mut GenericArray::from_mut_slice(&mut hash.0));
+        hasher.finalize_into(GenericArray::from_mut_slice(&mut hash.0));
     }
 }

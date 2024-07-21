@@ -54,8 +54,8 @@ fn parse_id(s: &str) -> Result<QBID, String> {
     QBID::from_hex(s).map_err(|e| e.to_string())
 }
 
-type LEN = u64;
-const LEN_SIZE: usize = std::mem::size_of::<LEN>();
+type Len = u64;
+const LEN_SIZE: usize = std::mem::size_of::<Len>();
 const READ_SIZE: usize = 64;
 
 #[tokio::main]
@@ -101,9 +101,9 @@ async fn connect() -> TStream {
 
 async fn write(conn: &mut TStream, req: QBControlRequest) {
     let contents = bitcode::encode(&req);
-    let contents_len = contents.len() as LEN;
-    conn.write(&contents_len.to_be_bytes()).await.unwrap();
-    conn.write(&contents).await.unwrap();
+    let contents_len = contents.len() as Len;
+    write_buf(conn, &contents_len.to_be_bytes()).await;
+    write_buf(conn, &contents).await;
 }
 
 async fn read(conn: &mut TStream) -> QBControlResponse {
@@ -113,7 +113,7 @@ async fn read(conn: &mut TStream) -> QBControlResponse {
             // read a message from the recv buffer
             let mut buf: [u8; LEN_SIZE] = [0; LEN_SIZE];
             buf.copy_from_slice(&bytes[0..LEN_SIZE]);
-            let packet_len = LEN_SIZE + LEN::from_be_bytes(buf) as usize;
+            let packet_len = LEN_SIZE + Len::from_be_bytes(buf) as usize;
             if packet_len > buf.len() {
                 let packet = bytes.drain(0..packet_len).collect::<Vec<_>>();
                 return bitcode::decode::<QBControlResponse>(&packet[LEN_SIZE..]).unwrap();
@@ -126,5 +126,12 @@ async fn read(conn: &mut TStream) -> QBControlResponse {
             panic!("remote closed the connection while reading");
         }
         bytes.extend_from_slice(&read_buf[0..size]);
+    }
+}
+
+async fn write_buf(conn: &mut TStream, buf: &[u8]) {
+    let mut written = 0;
+    while written < buf.len() {
+        written += conn.write(&buf[written..]).await.unwrap();
     }
 }

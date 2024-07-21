@@ -58,7 +58,7 @@ impl QBIgnore {
     pub fn parse(path: impl AsRef<QBPath>, contents: impl AsRef<str>) -> QBIgnoreResult<QBIgnore> {
         let fspath = path.as_ref().as_fspath();
         let mut builder = ignore::gitignore::GitignoreBuilder::new(fspath);
-        for line in contents.as_ref().split("\n") {
+        for line in contents.as_ref().split('\n') {
             builder.add_line(None, line)?;
         }
         // TODO: error handling
@@ -141,19 +141,16 @@ impl QBIgnoreMap {
 
         match kind {
             QBFSChangeKind::Update { content, .. } => {
-                match simdutf8::basic::from_utf8(content) {
-                    Ok(str) => {
-                        let ignore = match QBIgnore::parse(&path, str) {
-                            Ok(ignore) => ignore,
-                            Err(err) => {
-                                warn!("skipping ignore file for {}: {}", path, err);
-                                return;
-                            }
-                        };
-                        self.ignores.insert(path, ignore);
-                    }
-                    Err(_) => {}
-                };
+                if let Ok(str) = simdutf8::basic::from_utf8(content) {
+                    let ignore = match QBIgnore::parse(&path, str) {
+                        Ok(ignore) => ignore,
+                        Err(err) => {
+                            warn!("skipping ignore file for {}: {}", path, err);
+                            return;
+                        }
+                    };
+                    self.ignores.insert(path, ignore);
+                }
             }
             QBFSChangeKind::Delete => _ = self.ignores.remove(&path),
             QBFSChangeKind::Create => {}

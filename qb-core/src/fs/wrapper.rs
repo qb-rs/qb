@@ -25,7 +25,7 @@ impl QBFSWrapper {
     pub fn new(root: impl AsRef<Path>) -> Self {
         let root = std::path::absolute(root).unwrap();
         let mut root_str = root.to_str().unwrap().to_string();
-        if root_str.ends_with("/") {
+        if root_str.ends_with('/') {
             root_str.pop();
         }
 
@@ -85,10 +85,10 @@ impl QBFSWrapper {
         let mut iter = tokio::fs::read_dir(fspath).await?;
         while let Some(entry) = iter.next_entry().await? {
             let file_type = entry.file_type().await?;
-            let file_name = Self::_str(entry.file_name())?;
+            let file_name = Self::str(entry.file_name())?;
 
             let resource = QBResource::new(
-                path.as_ref().clone().sub(file_name)?,
+                path.as_ref().clone().substitue(file_name)?,
                 QBResourceKind::from_file_type(file_type),
             );
 
@@ -105,14 +105,13 @@ impl QBFSWrapper {
         let fspath = self.fspath(&path);
 
         let mut entries = Vec::new();
-        let mut iter = std::fs::read_dir(fspath)?;
-        while let Some(entry) = iter.next() {
+        for entry in std::fs::read_dir(fspath)? {
             let entry = entry?;
             let file_type = entry.file_type()?;
-            let file_name = Self::_str(entry.file_name())?;
+            let file_name = Self::str(entry.file_name())?;
 
             let resource = QBResource::new(
-                path.as_ref().clone().sub(file_name)?,
+                path.as_ref().clone().substitue(file_name)?,
                 QBResourceKind::from_file_type(file_type),
             );
 
@@ -161,7 +160,7 @@ impl QBFSWrapper {
     pub fn parse(&self, path: impl AsRef<Path>) -> QBFSResult<QBPath> {
         Ok(QBPath::parse(
             self.root_str.as_str(),
-            Self::_strref(path.as_ref().as_os_str())?,
+            Self::strref(path.as_ref().as_os_str())?,
         )?)
     }
 
@@ -172,15 +171,13 @@ impl QBFSWrapper {
 
     /// Utility for converting an osstring into a string
     #[inline]
-    fn _str(osstring: OsString) -> QBFSResult<String> {
-        osstring
-            .into_string()
-            .map_err(|str| QBFSError::OsString(str))
+    fn str(osstring: OsString) -> QBFSResult<String> {
+        osstring.into_string().map_err(QBFSError::OsString)
     }
 
     /// Utility for converting an osstr into a str
     #[inline]
-    fn _strref<'a>(osstring: &'a OsStr) -> QBFSResult<&'a str> {
+    fn strref(osstring: &OsStr) -> QBFSResult<&str> {
         osstring
             .to_str()
             .ok_or_else(|| QBFSError::OsString(osstring.to_owned()))

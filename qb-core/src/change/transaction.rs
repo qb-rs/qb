@@ -24,15 +24,15 @@ impl From<HashMap<QBResource, Vec<QBChange>>> for QBTransaction {
     }
 }
 
-impl Into<Vec<QBChange>> for QBTransaction {
-    fn into(self) -> Vec<QBChange> {
-        self.into_vec()
+impl From<QBTransaction> for Vec<QBChange> {
+    fn from(val: QBTransaction) -> Self {
+        val.into_vec()
     }
 }
 
-impl Into<HashMap<QBResource, Vec<QBChange>>> for QBTransaction {
-    fn into(self) -> HashMap<QBResource, Vec<QBChange>> {
-        self.into_map()
+impl From<QBTransaction> for HashMap<QBResource, Vec<QBChange>> {
+    fn from(val: QBTransaction) -> HashMap<QBResource, Vec<QBChange>> {
+        val.into_map()
     }
 }
 
@@ -46,6 +46,7 @@ impl QBTransaction {
 
     /// Convert a vec of entries into a transaction.
     ///
+    /// # Safety
     /// [!] This will not sort the individual entries
     /// and therefore requires a sorted vec as input.
     pub unsafe fn from_vec_unchecked(value: Vec<QBChange>) -> Self {
@@ -65,6 +66,7 @@ impl QBTransaction {
 
     /// Convert a map into a transaction.
     ///
+    /// # Safety
     /// [!] This will not sort the individual entries
     /// and therefore requires sorted entries as input.
     pub unsafe fn from_map_unchecked(value: HashMap<QBResource, Vec<QBChange>>) -> Self {
@@ -102,9 +104,10 @@ impl QBTransaction {
 
     /// Insert entry for resource, do not sort
     ///
-    /// This method is marked as unsafe, as in release
-    /// builds pushing entries not sorted by timestamp
-    /// can cause issues when minifying.
+    /// # Safety
+    /// [!] This method requires the entry to
+    /// have a lesser timestamp than the head otherwise
+    /// this can cause issues when minifying.
     ///
     /// In debug mode this would cause a runtime panic.
     pub unsafe fn push_unchecked(&mut self, entry: QBChange) {
@@ -162,12 +165,12 @@ impl QBTransaction {
     }
 
     #[inline]
-    fn _sort(entries: &mut Vec<QBChange>) {
+    fn _sort(entries: &mut [QBChange]) {
         entries.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
     }
 
     #[inline]
-    fn _sort_borrowed(entries: &mut Vec<&QBChange>) {
+    fn _sort_borrowed(entries: &mut [&QBChange]) {
         entries.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
     }
 

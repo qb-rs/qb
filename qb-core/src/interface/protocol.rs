@@ -19,9 +19,9 @@ pub struct BridgeMessage {
     pub msg: Vec<u8>,
 }
 
-impl Into<Message> for BridgeMessage {
-    fn into(self) -> Message {
-        Message::Bridge(self)
+impl From<BridgeMessage> for Message {
+    fn from(val: BridgeMessage) -> Self {
+        Message::Bridge(val)
     }
 }
 
@@ -83,15 +83,15 @@ impl fmt::Display for Message {
     }
 }
 
-impl Into<QBIMessage> for Message {
-    fn into(self) -> QBIMessage {
-        QBIMessage(self)
+impl From<Message> for QBIMessage {
+    fn from(val: Message) -> Self {
+        QBIMessage(val)
     }
 }
 
-impl Into<QBMessage> for Message {
-    fn into(self) -> QBMessage {
-        QBMessage::Message(self)
+impl From<Message> for QBMessage {
+    fn from(val: Message) -> Self {
+        QBMessage::Message(val)
     }
 }
 

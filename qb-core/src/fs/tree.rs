@@ -112,13 +112,13 @@ impl TreeDir {
     /// Alias for self.get(key)
     #[inline]
     pub fn get(&self, key: impl AsRef<str>) -> Option<usize> {
-        self.contents.get(key.as_ref()).map(|v| *v)
+        self.contents.get(key.as_ref()).copied()
     }
 }
 
-impl Into<QBFileTreeNode> for TreeDir {
-    fn into(self) -> QBFileTreeNode {
-        QBFileTreeNode::Dir(self)
+impl From<TreeDir> for QBFileTreeNode {
+    fn from(val: TreeDir) -> Self {
+        QBFileTreeNode::Dir(val)
     }
 }
 
@@ -142,9 +142,9 @@ impl Default for TreeFile {
     }
 }
 
-impl Into<QBFileTreeNode> for TreeFile {
-    fn into(self) -> QBFileTreeNode {
-        QBFileTreeNode::File(self)
+impl From<TreeFile> for QBFileTreeNode {
+    fn from(val: TreeFile) -> Self {
+        QBFileTreeNode::File(val)
     }
 }
 
@@ -242,11 +242,11 @@ impl QBFileTree {
             .iter()
             .map(|(k, v)| match &self.arena[*v] {
                 QBFileTreeNode::File(f) => Compare {
-                    resource: path.as_ref().clone().sub(k.clone()).unwrap().file(),
+                    resource: path.as_ref().clone().substitue(k.clone()).unwrap().file(),
                     hash: f.hash.clone(),
                 },
                 QBFileTreeNode::Dir(_) => Compare {
-                    resource: path.as_ref().clone().sub(k.clone()).unwrap().dir(),
+                    resource: path.as_ref().clone().substitue(k.clone()).unwrap().dir(),
                     hash: Default::default(),
                 },
                 _ => panic!("uninitialized"),
@@ -294,7 +294,8 @@ impl QBFileTree {
             stack.extend(
                 compare_tree
                     .iter()
-                    .filter_map(|e| e.resource.is_dir().then(|| e.resource.path.clone())),
+                    .filter(|e| e.resource.is_dir())
+                    .map(|e| e.resource.path.clone()),
             );
 
             for entry in compare_fs {
@@ -454,7 +455,7 @@ impl QBFileTree {
 
     /// create this resource
     pub fn create(&mut self, resource: &QBResource) {
-        match self.create_ptr(&resource) {
+        match self.create_ptr(resource) {
             Some(ptr) => {
                 self.arena[ptr] = match resource.is_dir() {
                     true => TreeDir::default().into(),
@@ -467,7 +468,7 @@ impl QBFileTree {
 
     /// delete this resource
     pub fn delete(&mut self, resource: &QBResource) {
-        match self.index(&resource) {
+        match self.index(resource) {
             Some(ptr) => {
                 if self.arena[ptr].is_dir() != resource.is_dir() {
                     warn!(

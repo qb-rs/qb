@@ -75,7 +75,8 @@ impl QBPath {
 
     /// Do not sanitize path and return QBPath instance
     ///
-    /// Be careful when using this method, as it could lead
+    /// # Safety
+    /// [!] Be careful when using this method, as it could lead
     /// to path traversal attacks.
     #[inline]
     pub unsafe fn new(path: impl Into<String>) -> Self {
@@ -140,7 +141,7 @@ impl QBPath {
     /// This allows the new path to be outside of the previous
     /// path if the target is something like "../abc".
     #[inline]
-    pub fn rel(mut self, path: impl AsRef<str>) -> QBPathResult<Self> {
+    pub fn relative(mut self, path: impl AsRef<str>) -> QBPathResult<Self> {
         self.0 = Self::clean(self.0 + "/" + path.as_ref())?;
         Ok(self)
     }
@@ -150,7 +151,7 @@ impl QBPath {
     /// This will throw an error if the new path lies outside
     /// of the previous path. [QBPathError::TraversalDetected]
     #[inline]
-    pub fn sub(mut self, path: impl AsRef<str>) -> QBPathResult<Self> {
+    pub fn substitue(mut self, path: impl AsRef<str>) -> QBPathResult<Self> {
         self.0 += Self::clean(path)?.as_str();
         Ok(self)
     }
@@ -160,7 +161,7 @@ impl QBPath {
     /// If absolute, this will try to slice of the root path and if
     /// path does not start with the root path, an error is returned.
     pub fn parse(root: &str, path: impl AsRef<str>) -> QBPathResult<QBPath> {
-        assert!(!root.ends_with("/"));
+        assert!(!root.ends_with('/'));
 
         // TODO: windows and shit
         let mut path = path.as_ref();
@@ -174,9 +175,9 @@ impl QBPath {
 
     /// Return the segments of this path
     #[inline]
-    pub fn segments<'a>(&'a self) -> std::iter::Skip<std::str::Split<'_, &str>> {
+    pub fn segments(&self) -> std::iter::Skip<std::str::Split<'_, char>> {
         // skip the first segment, as it is always empty
-        self.0.split("/").skip(1)
+        self.0.split('/').skip(1)
     }
 
     /// Return the file extension of this path.
@@ -222,7 +223,7 @@ impl QBPath {
     pub fn clean(path: impl AsRef<str>) -> QBPathResult<String> {
         let segs = path
             .as_ref()
-            .splitn(Self::MAX_SEGS, "/")
+            .splitn(Self::MAX_SEGS, '/')
             .collect::<Vec<_>>();
 
         if segs.len() == Self::MAX_SEGS {
@@ -326,7 +327,7 @@ impl QBResourceKind {
     /// Checks whether this matches the given metadata
     #[inline]
     pub fn is_metadata(&self, metadata: std::fs::Metadata) -> bool {
-        Self::is_file_type(&self, metadata.file_type())
+        self.is_file_type(metadata.file_type())
     }
 }
 
@@ -385,7 +386,7 @@ impl QBResource {
     #[deprecated(note = "use QBPath::parse()?.file() instead")]
     pub fn try_from(value: impl AsRef<str>) -> QBPathResult<Self> {
         let path = QBPath::try_from(&value)?;
-        if value.as_ref().ends_with("/") {
+        if value.as_ref().ends_with('/') {
             Ok(Self::new(path, QBResourceKind::Dir))
         } else {
             Ok(Self::new(path, QBResourceKind::File))
