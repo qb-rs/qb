@@ -1,0 +1,28 @@
+{
+  "name": "quixbyte.org",
+  "version": "0.0.47",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
+    "check": "svelte-kit sync && svelte-check --tsconfig tsconfig.json",
+    "check:watch": "svelte-kit sync && svelte-check --tsconfig tsconfig.json --watch"
+  },
+  "devDependencies": {
+    "svelte-check": "^3.5.1",
+    "typescript": "^5.2.2"
+  },
+  "type": "module",
+  "dependencies": {
+    "@fontsource/inter": "^5.0.8",
+    "@fontsource/teko": "^5.0.9",
+    "@fortawesome/free-brands-svg-icons": "^6.4.2",
+    "@fortawesome/free-solid-svg-icons": "^6.4.2",
+    "@sveltejs/adapter-static": "^2.0.3",
+    "@sveltejs/kit": "^1.0.12",
+    "svelte": "^4.2.0",
+    "svelte-fa": "^3.0.4",
+    "svelte-preprocess": "^5.0.0",
+    "vite": "^4.4.9"
+  }
+}

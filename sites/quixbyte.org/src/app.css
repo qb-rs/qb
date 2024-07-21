@@ -1,0 +1,89 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
+
+/* ████████████████████████████████████████████████ */
+/* █─▄▄▄─█▄─██─▄█▄─▄█▄─▀─▄█▄─▄─▀█▄─█─▄█─▄─▄─█▄─▄▄─█ */
+/* █─██▀─██─██─███─███▀─▀███─▄─▀██▄─▄████─████─▄█▀█ */
+/* ▀───▄▄▀▀▄▄▄▄▀▀▄▄▄▀▄▄█▄▄▀▄▄▄▄▀▀▀▄▄▄▀▀▀▄▄▄▀▀▄▄▄▄▄▀ */
+/* https://github.com/QuixByte/qb/blob/main/LICENSE */
+
+/* (c) Copyright 2023 The QuixByte Authors */
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Inter", sans-serif;
+}
+  
+h1 {
+  font-family: "Teko", sans-serif;
+  font-size: 3rem;
+  letter-spacing: -20%;
+  line-height: 1em;
+  margin-bottom: 40px;
+  color: #000c2a;
+}
+
+p {
+  line-height: 1.4em;
+  color: #333f55;
+}
+
+.link {
+  text-decoration: none;
+  color: blue;
+  position: relative;
+
+  transition: color 0.3s ease-in-out;
+}
+
+.link:hover {
+  color: #44f;
+}
+
+.link::before {
+  content: "";
+  display: inline-block;
+  position: absolute;
+  width: 0;
+  height: 1px;
+  background-color: #44f;
+  left: 0;
+  bottom: 0;
+  transition: width 0.3s ease-in-out;
+}
+
+.link:hover::before {
+  width: 100%;
+}
+
+.button {
+  font-size: 20px;
+  display: inline-block;
+  padding: 0.4em 0.8em;
+  border-radius: 0.6em;
+  text-decoration: none;
+  border: 0.1em solid rgba(0, 0, 0, 0.1);
+  color: #333f55;
+  transition: color 0.3s ease, background-color 0.3s ease,
+    border-color 0.3s ease, outline 0.3s ease;
+}
+
+.button:hover, .button:active {
+  background-color: #55f;
+  border-color: #44f;
+  color: white;
+
+  outline: 0.2em solid rgba(0, 0, 255, 0.5);
+  outline-offset: 0.2em;
+  animation: 3s button-outline linear infinite;
+}
+
+@keyframes button-outline {
+  50% {
+    outline-color: rgba(100, 100, 255, 0.5);
+  }
+}
