@@ -17,30 +17,25 @@ something meaningful once or twice and then get in touch.
 (lucasbirkert@gmail.com)
 ```
 
-----
-
-# Table of Contents
+## Table of Contents
 
 1. [Goals](#goals)
 2. [Platform Support](#platform-support)
 3. [QBI Support](#qbi-support)
 4. [Quickstart](#quickstart)
-5. [Terminology](#termology)
+5. [Terminology](#terminology)
 
-----
-
-# Goals
+## Goals
 
 - Fast, resilient sync
+- Memory safety, no crashes
 - Low resource usage
-- Support of many different [storage services](#terminology-storage-service)
+- Support of many different [storage services](#terminology-storage-service) ([current state](#qbi-support))
 - Extensibility, allow external processes to act as [QBI](#terminology-interface)s
-- Wide platform support
+- Wide platform support ([current state](#platform-support))
 - Entirely opensource
 
-----
-
-# Platform Support
+## Platform Support
 
 <!-- TODO: tidy this -->
 
@@ -53,9 +48,7 @@ Mac-OS|any|untested, should work|yes
 Android|any|unknown|yes
 iOS|any|unknown|yes
 
-----
-
-# QBI Support
+## QBI Support
 
 <!-- TODO: tidy this -->
 
@@ -68,9 +61,7 @@ qbi-client|sync to server|unimplemented|yes
 qbi-gdrive|sync to Google Drive|unimplemented|yes
 qbi-dropbox|sync to Dropbox|unimplemented|yes
 
-----
-
-# Quickstart
+## Quickstart
 
 1. Install the latest version of rust: https://rustup.rs/
 2. Clone the repository:
@@ -87,24 +78,24 @@ $ cargo run --bin qb-daemon
 $ cargo run --bin qb-app
 ```
 
-----
+## Terminology
 
-# Terminology
-
-<h2 id="terminology-interface">interface</h2>
+<h3 id="terminology-interface">interface</h3>
 
 A QBI (quixbyte interface) is a piece of software which helps the [master](#terminology-master)
 to communicate with some [storage service](#terminology-storage-service).
 
-<h2 id="terminology-master">master</h2>
+<h3 id="terminology-master">master</h3>
 
 The master controls which [QBI](#terminology-interface)s to attach to and handles the communication
 between the different interfaces.
 
-<h2 id="terminology-storage-service">storage service</h2>
+<h3 id="terminology-storage-service">storage service</h3>
 
 A storage service is an entity that we can communicate with to store and read files.
 
 ----
+
+Project licensed under [GPLv3](LICENSE)
 
 &copy; 2024 The QuixByte Project Authors - All Rights Reserved
