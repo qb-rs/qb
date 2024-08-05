@@ -177,6 +177,7 @@ impl QBPContentEncoding {
         }
     }
 
+    #[inline(always)]
     fn _encode<E: Encoder<In = u8, Out = u8>>(data: &[u8], mut encoder: E) -> Vec<u8>
     where
         CompressionError: From<E::Error>,
@@ -198,6 +199,7 @@ impl QBPContentEncoding {
         }
     }
 
+    #[inline(always)]
     fn _decode<D: Decoder<Input = u8, Output = u8>>(data: &[u8], mut decoder: D) -> Vec<u8>
     where
         CompressionError: From<D::Error>,
