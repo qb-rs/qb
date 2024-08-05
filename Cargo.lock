@@ -765,6 +765,7 @@ version = "0.1.0"
 dependencies = [
  "bitcode",
  "interprocess",
+ "qb-control",
  "qb-core",
  "qb-proto",
  "tokio",
@@ -796,6 +797,7 @@ dependencies = [
  "bitcode",
  "notify",
  "qb-core",
+ "serde",
  "tokio",
  "tracing",
 ]

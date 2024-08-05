@@ -1,7 +1,6 @@
 use std::{fmt, future::Future};
 
 use bitcode::{Decode, Encode};
-use msg::QBControlRequest;
 use qb_core::{
     interface::{QBIBridgeMessage, QBIHostMessage, QBIId},
     QB,
@@ -11,7 +10,7 @@ use qb_core::{
 pub use qbi_local;
 
 use qb_core::common::id::QBId;
-use std::fmt;
+use serde::{Deserialize, Serialize};
 
 #[derive(Encode, Decode, Serialize, Deserialize)]
 pub enum QBControlRequest {
@@ -59,7 +58,7 @@ impl ProcessQBControlRequest for QB {
     }
 }
 
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Serialize, Deserialize)]
 pub enum QBControlResponse {
     // TODO: attach/detach success/error
     Bridge { msg: Vec<u8> },
@@ -83,12 +82,12 @@ impl QBControlRequest {
     pub async fn process_to(self, qb: &mut QB, caller: QBId) {
         // TODO: error handling
         match self {
-            QBControlRequest::Start { id } => {
+            QBControlRequest::Start { id: _id } => {
                 // init.attach_to(qb, id).await;
                 todo!()
             }
             QBControlRequest::Stop { id } => {
-                qb.detach(&id).await.unwrap().join().unwrap();
+                qb.detach(&id).await.unwrap().await.unwrap();
             }
             QBControlRequest::Bridge { id, msg } => {
                 qb.send(

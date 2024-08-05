@@ -5,6 +5,7 @@
 
 use std::{collections::HashMap, path::Path, time::Duration};
 
+use common::device::QBDeviceId;
 use tokio::{
     sync::mpsc,
     task::{AbortHandle, JoinHandle, JoinSet},
@@ -47,6 +48,7 @@ impl QBIHandle {
 pub struct QB {
     handles: HashMap<QBIId, QBIHandle>,
     fs: QBFS,
+    device_id: QBDeviceId,
     recv_pool: JoinSet<Recv>,
     bridge_recv_pool: Vec<QBIBridgeMessage>,
 }
@@ -62,6 +64,7 @@ impl QB {
             handles: HashMap::new(),
             recv_pool: JoinSet::new(),
             bridge_recv_pool: Vec::new(),
+            device_id: QBDeviceId(0),
             fs,
         }
     }
@@ -233,10 +236,13 @@ impl QB {
             id.clone(),
             QBIHandle {
                 syncing: false,
-                join_handle: tokio::spawn(cx.run(QBICommunication {
-                    rx: qbi_rx,
-                    tx: qbi_tx,
-                })),
+                join_handle: tokio::spawn(cx.run(
+                    self.device_id.clone(),
+                    QBICommunication {
+                        rx: qbi_rx,
+                        tx: qbi_tx,
+                    },
+                )),
                 abort_handle,
                 tx: main_tx,
             },

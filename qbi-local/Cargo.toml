@@ -9,3 +9,4 @@ bitcode = "0.6.0"
 notify = "6.1.1"
 tracing = "0.1.40"
 qb-core = { path = "../qb-core" }
+serde = { version = "1.0.204", features = ["derive"] }

@@ -37,6 +37,12 @@ pub struct QBIId {
     pub nonce: u64,
 }
 
+impl fmt::Display for QBIId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_hex())
+    }
+}
+
 impl QBIId {
     /// Generate a QBIId for a QBI which operates on the device with the given device_id.
     pub fn generate(device_id: QBDeviceId) -> Self {
@@ -129,9 +135,21 @@ impl From<Message> for QBISlaveMessage {
     }
 }
 
+impl From<QBIBridgeMessage> for QBISlaveMessage {
+    fn from(value: QBIBridgeMessage) -> Self {
+        QBISlaveMessage::Bridge(value)
+    }
+}
+
 impl From<Message> for QBIHostMessage {
     fn from(val: Message) -> Self {
         QBIHostMessage::Message(val)
+    }
+}
+
+impl From<QBIBridgeMessage> for QBIHostMessage {
+    fn from(value: QBIBridgeMessage) -> Self {
+        QBIHostMessage::Bridge(value)
     }
 }
 
@@ -162,13 +180,17 @@ pub enum QBIHostMessage {
 pub trait QBIContext: Send + Sync {
     /// The main function of the QBI which will be spawned into a seperate
     /// async task (might be a thread, depends on how tokio handles this).
-    fn run(self, com: QBICommunication) -> impl Future<Output = ()> + Send + 'static;
+    fn run(
+        self,
+        host_id: QBDeviceId,
+        com: QBICommunication,
+    ) -> impl Future<Output = ()> + Send + 'static;
 }
 
 /// TODO: doc
 pub trait QBISetup<'a>: Encode + Decode<'a> + Serialize + Deserialize<'a> {
     /// Setup this kind of QBI.
-    fn setup(self) -> impl Future<Output = QBIId> + Send + 'static;
+    fn setup(self) -> impl Future<Output = QBIId> + Send;
 }
 
 /// struct describing the communication interface between QBI and master

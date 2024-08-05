@@ -7,6 +7,7 @@ use phf::phf_ordered_map;
 use serde::{Deserialize, Serialize};
 use simdutf8::basic::Utf8Error;
 use thiserror::Error;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use url_search_params::{build_url_search_params, parse_url_search_params};
 
 #[derive(Error, Debug)]
@@ -367,6 +368,15 @@ pub struct QBP {
     pub reader: QBPReader,
 }
 
+pub trait Read: AsyncReadExt + Unpin {}
+impl<T> Read for T where T: AsyncReadExt + Unpin {}
+
+pub trait Write: AsyncWriteExt + Unpin {}
+impl<T> Write for T where T: AsyncWriteExt + Unpin {}
+
+pub trait ReadWrite: AsyncReadExt + AsyncWriteExt + Unpin {}
+impl<T> ReadWrite for T where T: AsyncReadExt + AsyncWriteExt + Unpin {}
+
 impl QBP {
     /// Returns whether this connection is ready,
     /// which means that the content type and encoding
@@ -379,10 +389,7 @@ impl QBP {
     ///
     /// # Cancelation Safety
     /// This method is not cancel safe. It should always be awaited.
-    pub async fn send_packet<W>(&mut self, write: &mut W, packet: &[u8]) -> Result<()>
-    where
-        W: tokio::io::AsyncWriteExt + Unpin,
-    {
+    pub async fn send_packet(&mut self, write: &mut impl Write, packet: &[u8]) -> Result<()> {
         let len_bytes = (packet.len() as u64).to_be_bytes();
         write.write_all(&len_bytes).await?;
         write.write_all(&packet).await?;
@@ -396,10 +403,7 @@ impl QBP {
     ///
     /// # Cancelation Safety
     /// This method is not cancel safe. It should always be awaited.
-    pub async fn send_blob<W>(&mut self, write: &mut W, blob: QBPBlob) -> Result<()>
-    where
-        W: tokio::io::AsyncWriteExt + Unpin,
-    {
+    pub async fn send_blob(&mut self, write: &mut impl Write, blob: QBPBlob) -> Result<()> {
         self.send_packet(write, blob.content_type.as_bytes())
             .await?;
         self.send_packet(write, &blob.content).await?;
@@ -410,10 +414,7 @@ impl QBP {
     ///
     /// This should be pre-anounced, as if not,
     /// we might mistake a regular message as a blob.
-    pub async fn read_blob<R>(&mut self, read: &mut R) -> Result<QBPBlob>
-    where
-        R: tokio::io::AsyncReadExt + Unpin,
-    {
+    pub async fn read_blob(&mut self, read: &mut impl Read) -> Result<QBPBlob> {
         let content_type = simdutf8::basic::from_utf8(&self.reader.read(read).await?)?.into();
         let content = self.reader.read(read).await?;
 
@@ -427,9 +428,8 @@ impl QBP {
     ///
     /// # Cancelation Safety
     /// This method is not cancel safe. It should always be awaited.
-    pub async fn send<W, T>(&mut self, write: &mut W, msg: T) -> Result<()>
+    pub async fn send<T>(&mut self, write: &mut impl Write, msg: T) -> Result<()>
     where
-        W: tokio::io::AsyncWriteExt + Unpin,
         for<'a> T: QBPMessage<'a>,
     {
         match &self.state {
@@ -450,10 +450,8 @@ impl QBP {
     ///
     /// # Cancelation Safety
     /// This method is cancelation safe.
-    pub async fn update<R, W, T>(&mut self, read: &mut R, write: &mut W) -> Result<Option<T>>
+    pub async fn update<T>(&mut self, conn: &mut impl ReadWrite) -> Result<Option<T>>
     where
-        R: tokio::io::AsyncReadExt + Unpin,
-        W: tokio::io::AsyncWriteExt + Unpin,
         for<'a> T: QBPMessage<'a>,
     {
         // send header packet
@@ -467,11 +465,11 @@ impl QBP {
                 headers,
             };
 
-            write.write(&header.serialize()).await?;
+            conn.write(&header.serialize()).await?;
             return Ok(None);
         }
 
-        let packet = self.reader.read(read).await?;
+        let packet = self.reader.read(conn).await?;
 
         match &self.state {
             QBPState::Negotiate => {
@@ -510,10 +508,7 @@ impl QBPReader {
     ///
     /// # Cancelation Safety
     /// This method is cancelation safe.
-    pub async fn read<R>(&mut self, read: &mut R) -> Result<Vec<u8>>
-    where
-        R: tokio::io::AsyncReadExt + Unpin,
-    {
+    pub async fn read(&mut self, read: &mut impl Read) -> Result<Vec<u8>> {
         loop {
             match self.len {
                 Some(len) => {

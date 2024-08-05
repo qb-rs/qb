@@ -31,7 +31,7 @@ use super::hash::QBHash;
 
 /// A device identifier.
 #[derive(Encode, Decode, Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
-pub struct QBDeviceId(u64);
+pub struct QBDeviceId(pub(crate) u64);
 
 impl From<&str> for QBDeviceId {
     fn from(value: &str) -> Self {

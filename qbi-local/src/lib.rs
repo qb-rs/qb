@@ -11,37 +11,50 @@ use notify::{
 };
 use qb_core::{
     change::{log::QBChangelog, transaction::QBTransaction, QBChange, QBChangeKind},
-    common::id::QBID_DEFAULT,
+    common::device::QBDeviceId,
     fs::{QBFileDiff, QBFS},
     interface::{
-        protocol::{BridgeMessage, Message, QBMessage},
-        QBICommunication,
+        Message, QBIBridgeMessage, QBICommunication, QBIContext, QBIHostMessage, QBIId, QBISetup,
     },
 };
-use qb_derive::QBIAsync;
+use serde::{Deserialize, Serialize};
 use tracing::{debug, info, trace};
 
-#[derive(Encode, Decode)]
-pub struct QBILocalInit {
+#[derive(Encode, Decode, Serialize, Deserialize)]
+pub struct QBILocal {
     pub path: String,
 }
 
-#[derive(QBIAsync)]
-#[context(QBILocalInit)]
-pub struct QBILocal {
+impl QBIContext for QBILocal {
+    async fn run(self, host_id: QBDeviceId, com: QBICommunication) {
+        Runner::init_async(self, host_id, com)
+            .await
+            .run_async()
+            .await;
+    }
+}
+
+impl<'a> QBISetup<'a> for QBILocal {
+    async fn setup(self) -> QBIId {
+        QBIId::generate(QBDeviceId::generate())
+    }
+}
+
+pub struct Runner {
     com: QBICommunication,
     fs: QBFS,
     transaction: QBTransaction,
     syncing: bool,
     watcher_skip: Vec<PathBuf>,
+    host_id: QBDeviceId,
 }
 
-impl QBILocal {
-    async fn init_async(cx: QBILocalInit, com: QBICommunication) -> Self {
+impl Runner {
+    async fn init_async(cx: QBILocal, host_id: QBDeviceId, com: QBICommunication) -> Self {
         let fs = QBFS::init(cx.path).await;
 
         com.send(Message::Common {
-            common: fs.devices.get_common(&QBID_DEFAULT).clone(),
+            common: fs.devices.get_common(&host_id).clone(),
         })
         .await;
 
@@ -49,6 +62,7 @@ impl QBILocal {
             syncing: false,
             watcher_skip: Vec::new(),
             transaction: Default::default(),
+            host_id,
             fs,
             com,
         }
@@ -59,11 +73,11 @@ impl QBILocal {
 
         match msg {
             Message::Common { common } => {
-                self.fs.devices.set_common(&QBID_DEFAULT, common);
+                self.fs.devices.set_common(&self.host_id, common);
                 self.fs.save_devices().await.unwrap();
             }
             Message::Sync { common, changes } => {
-                assert!(self.fs.devices.get_common(&QBID_DEFAULT).clone() == common);
+                assert!(self.fs.devices.get_common(&self.host_id).clone() == common);
 
                 let local_entries = self.fs.changelog.after(&common).unwrap();
 
@@ -83,7 +97,7 @@ impl QBILocal {
                 self.fs.apply_changes(fschanges).await.unwrap();
 
                 let new_common = self.fs.changelog.head();
-                self.fs.devices.set_common(&QBID_DEFAULT, new_common);
+                self.fs.devices.set_common(&self.host_id, new_common);
 
                 // Send sync to remote
                 if !self.syncing {
@@ -101,14 +115,6 @@ impl QBILocal {
                 self.fs.save().await.unwrap();
             }
             Message::Broadcast { msg } => println!("BROADCAST: {}", msg),
-            Message::Bridge(BridgeMessage { caller, .. }) => {
-                self.com
-                    .send(Message::Bridge(BridgeMessage {
-                        caller,
-                        msg: "unimplemented".into(),
-                    }))
-                    .await
-            }
         }
     }
 
@@ -198,7 +204,7 @@ impl QBILocal {
         // notify remote
         self.com
             .send(Message::Sync {
-                common: self.fs.devices.get_common(&QBID_DEFAULT).clone(),
+                common: self.fs.devices.get_common(&self.host_id).clone(),
                 changes: std::mem::take(&mut changes),
             })
             .await;
@@ -223,8 +229,15 @@ impl QBILocal {
             tokio::select! {
                 Some(msg) = self.com.rx.recv() => {
                     match msg {
-                        QBMessage::Message(msg) => self.on_message(msg).await,
-                        QBMessage::Stop => break
+                        QBIHostMessage::Message(msg) => self.on_message(msg).await,
+                        QBIHostMessage::Bridge(QBIBridgeMessage { caller, .. }) =>
+                            self.com
+                                .send(QBIBridgeMessage {
+                                    caller,
+                                    msg: "unimplemented".into(),
+                                })
+                                .await,
+                        QBIHostMessage::Stop => break
                     }
                 },
                 Some(Ok(event)) = rx.recv() => {
