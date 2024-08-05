@@ -19,7 +19,7 @@
     "@fortawesome/free-brands-svg-icons": "^6.4.2",
     "@fortawesome/free-solid-svg-icons": "^6.4.2",
     "@sveltejs/adapter-static": "^2.0.3",
-    "@sveltejs/kit": "^1.0.12",
+    "@sveltejs/kit": "^1.30.4",
     "svelte": "^4.2.0",
     "svelte-fa": "^3.0.4",
     "svelte-preprocess": "^5.0.0",
