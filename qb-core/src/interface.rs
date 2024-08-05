@@ -161,7 +161,7 @@ pub enum QBIHostMessage {
 /// on what tokio chooses to do). QBIs are asynchronous by default.
 pub trait QBIContext: Send + Sync {
     /// The main function of the QBI which will be spawned into a seperate
-    /// execution unit (might be a thread, depends on how tokio handles this).
+    /// async task (might be a thread, depends on how tokio handles this).
     fn run(self, com: QBICommunication) -> impl Future<Output = ()> + Send + 'static;
 }
 
