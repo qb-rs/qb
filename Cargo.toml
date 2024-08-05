@@ -6,7 +6,7 @@ members = [
   "qb-daemon",
   "qb-cli",
   "qb-control",
-  "qbi-local",
+  "qbi-local", "qb-proto",
 ]
 
 [workspace.package]
