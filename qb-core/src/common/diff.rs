@@ -3,11 +3,12 @@
 //! text files.
 
 use bitcode::{Decode, Encode};
+use serde::{Deserialize, Serialize};
 
 use super::hash::QBHash;
 
 /// struct which stores operations for a transformation on a string
-#[derive(Encode, Decode, Debug, Clone)]
+#[derive(Encode, Decode, Serialize, Deserialize, Debug, Clone)]
 pub struct QBDiff {
     /// Describes the hash of the content before the transformation.
     pub old_hash: QBHash,
@@ -16,7 +17,7 @@ pub struct QBDiff {
 }
 
 /// struct which stores a single operation for a transformation on a string
-#[derive(Encode, Decode, Debug, Clone)]
+#[derive(Encode, Decode, Serialize, Deserialize, Debug, Clone)]
 pub enum QBDiffOp {
     /// range is equal
     Equal {

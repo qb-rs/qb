@@ -6,10 +6,13 @@ use core::fmt;
 
 use bitcode::{Decode, Encode};
 use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 use sha2::{digest::generic_array::GenericArray, Digest, Sha256};
 
 /// struct which describes a hash
-#[derive(Encode, Decode, PartialEq, Eq, Clone, Default, Hash, PartialOrd, Ord)]
+#[derive(
+    Encode, Decode, Serialize, Deserialize, PartialEq, Eq, Clone, Default, Hash, PartialOrd, Ord,
+)]
 pub struct QBHash(pub(crate) [u8; 32]);
 
 impl fmt::Display for QBHash {

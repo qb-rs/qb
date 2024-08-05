@@ -16,12 +16,12 @@ use wrapper::QBFSWrapper;
 use crate::{
     change::log::QBChangelog,
     common::{
+        device::QBDevices,
         diff::QBDiff,
         hash::QBHash,
         ignore::{QBIgnoreMap, QBIgnoreMapBuilder},
         resource::{qbpaths, QBPath, QBPathError},
     },
-    interface::QBDevices,
 };
 
 /// struct describing an error that occured while dealing with the file system

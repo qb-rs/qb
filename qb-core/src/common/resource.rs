@@ -9,6 +9,7 @@ use std::{
 
 use bitcode::{Decode, Encode};
 
+use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// crate that stores common paths to resources
@@ -49,7 +50,7 @@ pub enum QBPathError {
 pub(crate) type QBPathResult<T> = Result<T, QBPathError>;
 
 /// struct describing a path pointing to a resource
-#[derive(Encode, Decode, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Encode, Decode, Serialize, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct QBPath(String);
 
 impl fmt::Display for QBPath {
@@ -252,7 +253,9 @@ impl QBPath {
 }
 
 /// struct describing a resource stored on this path
-#[derive(Encode, Decode, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Encode, Decode, Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash,
+)]
 pub struct QBResource {
     /// the path that points to where this resource is stored
     pub path: QBPath,
@@ -261,7 +264,9 @@ pub struct QBResource {
 }
 
 /// enum describing the kind of a resource
-#[derive(Encode, Decode, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(
+    Encode, Decode, Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash,
+)]
 pub enum QBResourceKind {
     /// a file
     File,

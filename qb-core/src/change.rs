@@ -13,6 +13,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use bitcode::{Decode, Encode};
 use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
 use time::macros::format_description;
 
 use crate::common::{
@@ -28,7 +29,7 @@ lazy_static! {
 }
 
 /// This struct describes a change that has been done.
-#[derive(Encode, Decode, Clone, Debug)]
+#[derive(Encode, Decode, Serialize, Deserialize, Clone, Debug)]
 pub struct QBChange {
     hash: QBHash,
     /// a unix timestamp describing when the change has been committed
@@ -91,7 +92,7 @@ impl QBChange {
 }
 
 /// an enum describing the different kinds of changes
-#[derive(Encode, Decode, Clone, Debug)]
+#[derive(Encode, Decode, Serialize, Deserialize, Clone, Debug)]
 pub enum QBChangeKind {
     /// change a binary file
     UpdateBinary {

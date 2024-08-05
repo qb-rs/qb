@@ -9,32 +9,11 @@ use bitcode::{Decode, Encode};
 use hex::FromHexError;
 use lazy_static::lazy_static;
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 
 /// struct which represents an id from a specific device
-#[derive(Encode, Decode, Debug, Clone, Default, Eq, PartialEq, Hash)]
+#[derive(Encode, Decode, Serialize, Deserialize, Debug, Clone, Default, Eq, PartialEq, Hash)]
 pub struct QBId(pub(crate) u64);
-
-/// macro rule for trivially creating id kinds in newtype fashion
-#[macro_export]
-macro_rules! qbid {
-    ($name: ident) => {
-        #[derive(bitcode::Encode, bitcode::Decode, Debug, Clone, Default, Eq, PartialEq, Hash)]
-        pub struct $name(crate::common::id::QBId);
-
-        impl $name {
-            pub fn generate() -> Self {
-                Self(crate::common::id::QBId::generate())
-            }
-            pub fn to_hex(&self) -> String {
-                self.0.to_hex()
-            }
-
-            pub fn from_hex(hex: impl AsRef<str>) -> Result<Self, hex::FromHexError> {
-                Ok(Self(crate::common::id::QBId::from_hex(hex)?))
-            }
-        }
-    };
-}
 
 impl From<&str> for QBId {
     fn from(value: &str) -> Self {
