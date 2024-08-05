@@ -1,19 +1,18 @@
-use std::{fmt, future::Future};
+use std::fmt;
 
 use bitcode::{Decode, Encode};
-use qb_core::{
-    interface::{QBIBridgeMessage, QBIHostMessage, QBIId},
-    QB,
-};
+use qb_core::interface::QBIId;
 
 // re-export qbis
 pub use qbi_local;
 
-use qb_core::common::id::QBId;
 use serde::{Deserialize, Serialize};
 
 #[derive(Encode, Decode, Serialize, Deserialize)]
 pub enum QBControlRequest {
+    Setup {
+        name: String,
+    },
     Start {
         id: QBIId,
     },
@@ -30,7 +29,10 @@ pub enum QBControlRequest {
 impl fmt::Display for QBControlRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            QBControlRequest::Start { id, .. } => {
+            QBControlRequest::Setup { name } => {
+                write!(f, "MSG_CONTROL_REQ_SETUP {}", name)
+            }
+            QBControlRequest::Start { id } => {
                 write!(f, "MSG_CONTROL_REQ_START {}", id)
             }
             QBControlRequest::Stop { id } => {
@@ -45,16 +47,6 @@ impl fmt::Display for QBControlRequest {
                 )
             }
         }
-    }
-}
-
-pub trait ProcessQBControlRequest {
-    fn process(&mut self, caller: QBId, request: QBControlRequest) -> impl Future<Output = ()>;
-}
-
-impl ProcessQBControlRequest for QB {
-    fn process(&mut self, caller: QBId, request: QBControlRequest) -> impl Future<Output = ()> {
-        request.process_to(self, caller)
     }
 }
 
@@ -73,28 +65,6 @@ impl fmt::Display for QBControlResponse {
                     "MSG_CONTROL_RESP_BRIDGE: {}",
                     simdutf8::basic::from_utf8(msg).unwrap_or("binary data")
                 )
-            }
-        }
-    }
-}
-
-impl QBControlRequest {
-    pub async fn process_to(self, qb: &mut QB, caller: QBId) {
-        // TODO: error handling
-        match self {
-            QBControlRequest::Start { id: _id } => {
-                // init.attach_to(qb, id).await;
-                todo!()
-            }
-            QBControlRequest::Stop { id } => {
-                qb.detach(&id).await.unwrap().await.unwrap();
-            }
-            QBControlRequest::Bridge { id, msg } => {
-                qb.send(
-                    &id,
-                    QBIHostMessage::Bridge(QBIBridgeMessage { caller, msg }),
-                )
-                .await;
             }
         }
     }

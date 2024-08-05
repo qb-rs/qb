@@ -6,12 +6,10 @@ use interprocess::local_socket::{
     tokio::Stream, traits::tokio::Listener, GenericNamespaced, ListenerNonblockingMode,
     ListenerOptions, ToNsName,
 };
-use qb_control::{
-    qbi_local::QBILocal, ProcessQBControlRequest, QBControlRequest, QBControlResponse,
-};
+use qb_control::{qbi_local::QBILocal, QBControlRequest, QBControlResponse};
 use qb_core::{
     common::id::QBId,
-    interface::{QBIContext, QBIId, QBISetup},
+    interface::{QBIBridgeMessage, QBIContext, QBIId, QBISetup},
     QB,
 };
 use qb_proto::{QBPBlob, QBP};
@@ -20,8 +18,9 @@ use tracing::{span, trace, Level};
 use tracing_panic::panic_hook;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
+// TODO: asyncify these
 pub type StartFn = Box<dyn Fn(&mut QB, QBIId, &[u8])>;
-pub type SetupFn = Box<dyn Fn(&mut QBDaemon, QBPBlob)>;
+pub type SetupFn = Box<dyn Fn(QBPBlob) -> (QBIId, Vec<u8>)>;
 
 pub struct QBIDescriptior {
     name: String,
@@ -53,6 +52,17 @@ impl QBDaemon {
         start(&mut self.qb, id, &descriptor.data);
     }
 
+    /// Stop a QBI by the given id.
+    pub async fn stop(&mut self, id: QBIId) {
+        self.qb.detach(&id).await;
+    }
+
+    pub fn setup(&mut self, name: String, blob: QBPBlob) {
+        let setup = self.setup_fns.get(&name).unwrap();
+        let (id, data) = setup(blob);
+        self.qbis.insert(id, QBIDescriptior { name, data });
+    }
+
     /// Register a QBI kind.
     pub fn register<T>(&mut self, name: impl Into<String>)
     where
@@ -68,25 +78,32 @@ impl QBDaemon {
                 runtime.block_on(qb.attach(id, bitcode::decode::<T>(data).unwrap()));
             }),
         );
-        let name_clone = name.clone();
         self.setup_fns.insert(
             name,
-            Box::new(move |daemon, blob| {
+            Box::new(move |blob| {
                 let runtime = tokio::runtime::Builder::new_current_thread()
                     .build()
                     .unwrap();
                 let cx = blob.deserialize::<T>().unwrap();
                 let data = bitcode::encode(&cx);
                 let id = runtime.block_on(cx.setup());
-                daemon.qbis.insert(
-                    id,
-                    QBIDescriptior {
-                        name: name_clone.clone(),
-                        data,
-                    },
-                );
+                (id, data)
             }),
         );
+    }
+
+    pub async fn process(&mut self, caller: QBId, msg: QBControlRequest, blob: Option<QBPBlob>) {
+        match msg {
+            QBControlRequest::Start { id } => self.start(id),
+            QBControlRequest::Stop { id } => self.stop(id).await,
+            QBControlRequest::Setup { name } => {
+                let blob = blob.unwrap();
+                self.setup(name, blob);
+            }
+            QBControlRequest::Bridge { id, msg } => {
+                self.qb.send(&id, QBIBridgeMessage { caller, msg }).await;
+            }
+        }
     }
 
     /// Register the default QBI kinds.
@@ -103,7 +120,7 @@ struct Handle {
 struct HandleInit {
     id: QBId,
     conn: Stream,
-    tx: mpsc::Sender<(QBId, QBControlRequest)>,
+    tx: mpsc::Sender<(QBId, QBControlRequest, Option<QBPBlob>)>,
     rx: mpsc::Receiver<QBControlResponse>,
 }
 
@@ -137,9 +154,11 @@ async fn main() {
         .unwrap();
 
     // Initialize the core library
-    let mut daemon = QBDaemon::init(QB::init("./local").await);
+    let qb = QB::init("./local").await;
+    let mut daemon = QBDaemon::init(qb);
 
-    let (req_tx, mut req_rx) = tokio::sync::mpsc::channel::<(QBId, QBControlRequest)>(10);
+    let (req_tx, mut req_rx) =
+        tokio::sync::mpsc::channel::<(QBId, QBControlRequest, Option<QBPBlob>)>(10);
     let mut handles: HashMap<QBId, Handle> = HashMap::new();
 
     // Process
@@ -158,8 +177,8 @@ async fn main() {
                         .unwrap();
                 }
             },
-            Some((caller, msg)) = req_rx.recv() => {
-                daemon.qb.process(caller, msg).await; // TODO: embed this
+            Some((caller, msg, blob)) = req_rx.recv() => {
+                daemon.process(caller, msg, blob).await;
             }
             Ok(conn) = socket.accept() => {
                 let id = QBId::generate();
@@ -202,8 +221,13 @@ async fn handle_run(mut init: HandleInit) -> qb_proto::Result<()> {
             res = protocol.update::<QBControlRequest>(&mut init.conn) => {
                 match res {
                     Ok(Some(msg)) => {
-                        init.tx.send((init.id, msg)).await.unwrap();
-                        todo!();
+                        let blob = match msg {
+                            QBControlRequest::Start { .. } => {
+                                Some(protocol.read_blob(&mut init.conn).await?)
+                            }
+                            _ => None
+                        };
+                        init.tx.send((init.id.clone(), msg, blob)).await.unwrap();
                     }
                     Ok(None) => {},
                     Err(err) => return Err(err),
