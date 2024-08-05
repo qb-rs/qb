@@ -765,20 +765,12 @@ version = "0.1.0"
 dependencies = [
  "bitcode",
  "interprocess",
- "qb-control",
  "qb-core",
+ "qb-proto",
  "tokio",
  "tracing",
  "tracing-panic",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "qb-derive"
-version = "0.1.0"
-dependencies = [
- "quote",
- "syn",
 ]
 
 [[package]]
@@ -804,7 +796,6 @@ dependencies = [
  "bitcode",
  "notify",
  "qb-core",
- "qb-derive",
  "tokio",
  "tracing",
 ]

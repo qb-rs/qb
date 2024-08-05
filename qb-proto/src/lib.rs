@@ -49,7 +49,7 @@ pub enum Error {
     Closed,
 }
 
-type Result<T> = std::result::Result<T, Error>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 /// The header packet which is used for content and version negotiation.
 pub struct QBPHeaderPacket {
@@ -310,6 +310,9 @@ pub trait QBPMessage<'a>: Encode + Decode<'a> + Serialize + Deserialize<'a> {
         bitcode::encode(self)
     }
 }
+
+/// auto implement the message trait
+impl<'a, T> QBPMessage<'a> for T where T: Encode + Decode<'a> + Serialize + Deserialize<'a> {}
 
 #[derive(Debug)]
 pub enum QBPState {
