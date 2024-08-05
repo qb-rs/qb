@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
 use bitcode::{Decode, Encode};
+use compression::prelude::*;
+use itertools::Itertools;
 use phf::phf_ordered_map;
 use serde::{Deserialize, Serialize};
 use simdutf8::basic::Utf8Error;
@@ -49,14 +51,29 @@ type Result<T> = std::result::Result<T, Error>;
 
 /// The header packet which is used for content and version negotiation.
 pub struct QBPHeaderPacket {
-    pub major_byte: u8,
-    pub minor_byte: u8,
+    pub major_version: u8,
+    pub minor_version: u8,
     pub headers: HashMap<String, String>,
 }
 
 /// The bytes that come first at every header packet's payload to ensure
 /// that the connected device actually communicates over QBP.
 pub const MAGIC_BYTES: [u8; 3] = *b"QBP";
+
+pub const MAJOR_VERSION: u8 = 0;
+pub const MINOR_VERSION: u8 = 0;
+
+/// The content types which this QBP supports.
+pub const SUPPORTED_CONTENT_TYPES: phf::OrderedMap<&'static str, QBPContentType> = phf_ordered_map! {
+    "application/bitcode" => QBPContentType::Bitcode,
+    "application/json" => QBPContentType::Json,
+};
+
+pub const SUPPORTED_CONTENT_ENCODINGS: phf::OrderedMap<&'static str, QBPContentEncoding> = phf_ordered_map! {
+    "bzip2" => QBPContentEncoding::BZip2,
+    "gzip" => QBPContentEncoding::GZip,
+    "zlib" => QBPContentEncoding::Zlib,
+};
 
 impl QBPHeaderPacket {
     /// Convert from a standard QBPPacket.
@@ -76,8 +93,8 @@ impl QBPHeaderPacket {
         }
 
         // unwrap version
-        let major_byte = packet[3];
-        let minor_byte = packet[4];
+        let major_version = packet[3];
+        let minor_version = packet[4];
 
         // read headers
         let head_bytes = &packet[5..];
@@ -88,8 +105,8 @@ impl QBPHeaderPacket {
         let headers = parse_url_search_params(head);
 
         Ok(Self {
-            major_byte,
-            minor_byte,
+            major_version,
+            minor_version,
             headers,
         })
     }
@@ -101,19 +118,13 @@ impl QBPHeaderPacket {
 
         let mut content = Vec::with_capacity(head_bytes.len() + 5);
         content.extend_from_slice(&MAGIC_BYTES);
-        content.push(self.major_byte);
-        content.push(self.minor_byte);
+        content.push(self.major_version);
+        content.push(self.minor_version);
         content.extend_from_slice(&head_bytes);
 
         content
     }
 }
-
-/// The content types which this QBP supports.
-pub const SUPPORTED_CONTENT_TYPES: phf::OrderedMap<&'static str, QBPContentType> = phf_ordered_map! {
-    "application/bitcode" => QBPContentType::Bitcode,
-    "application/json" => QBPContentType::Json,
-};
 
 /// Negotiate the content-type.
 pub fn negotiate(headers: &HashMap<String, String>) -> Option<QBPContentType> {
@@ -147,6 +158,57 @@ pub fn negotiate(headers: &HashMap<String, String>) -> Option<QBPContentType> {
             .unwrap_unchecked()
             .clone()
     })
+}
+
+#[derive(Debug, Clone)]
+pub enum QBPContentEncoding {
+    BZip2,
+    GZip,
+    Zlib,
+}
+
+impl QBPContentEncoding {
+    /// Encode a blob of data using this encoding.
+    pub fn encode(&self, data: &[u8]) -> Vec<u8> {
+        match self {
+            QBPContentEncoding::BZip2 => Self::_encode(data, BZip2Encoder::new(9)),
+            QBPContentEncoding::GZip => Self::_encode(data, GZipEncoder::new()),
+            QBPContentEncoding::Zlib => Self::_encode(data, ZlibEncoder::new()),
+        }
+    }
+
+    fn _encode<E: Encoder<In = u8, Out = u8>>(data: &[u8], mut encoder: E) -> Vec<u8>
+    where
+        CompressionError: From<E::Error>,
+        E::Error: std::fmt::Debug,
+    {
+        data.into_iter()
+            .cloned()
+            .encode(&mut encoder, Action::Finish)
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap()
+    }
+
+    /// Decode a blob of data using this encoding.
+    pub fn decode(&self, data: &[u8]) -> Vec<u8> {
+        match self {
+            QBPContentEncoding::BZip2 => Self::_decode(data, BZip2Decoder::new()),
+            QBPContentEncoding::GZip => Self::_decode(data, GZipDecoder::new()),
+            QBPContentEncoding::Zlib => Self::_decode(data, ZlibDecoder::new()),
+        }
+    }
+
+    fn _decode<D: Decoder<Input = u8, Output = u8>>(data: &[u8], mut decoder: D) -> Vec<u8>
+    where
+        CompressionError: From<D::Error>,
+        D::Error: std::fmt::Debug,
+    {
+        data.into_iter()
+            .cloned()
+            .decode(&mut decoder)
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap()
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -213,6 +275,8 @@ pub trait QBPMessage<'a>: Encode + Decode<'a> + Serialize + Deserialize<'a> {
 
 #[derive(Debug)]
 pub enum QBPState {
+    /// Initial state. We need to send the header
+    /// for negotiation purposes.
     Initial,
     /// Negotiation state. We need to negotiate
     /// the content type and the content encoding
@@ -225,7 +289,7 @@ pub enum QBPState {
 
 impl Default for QBPState {
     fn default() -> Self {
-        Self::Negotiate
+        Self::Initial
     }
 }
 
@@ -247,11 +311,15 @@ impl QBP {
         W: tokio::io::AsyncWriteExt + Unpin,
         for<'a> T: QBPMessage<'a>,
     {
+        // send header packet
         if let QBPState::Initial = self.state {
+            let mut headers = HashMap::new();
+            let accept = SUPPORTED_CONTENT_TYPES.keys().join(",");
+            headers.insert("accept".to_owned(), accept);
             let header = QBPHeaderPacket {
-                major_byte: MAJOR_BYTE,
-                minor_byte: MINOR_BYTE,
-                headers: headers,
+                major_version: MAJOR_VERSION,
+                minor_version: MINOR_VERSION,
+                headers,
             };
 
             write.write(&header.serialize()).await?;
@@ -271,7 +339,7 @@ impl QBP {
                 let message = content_type.from_bytes::<T>(&packet)?;
                 Ok(Some(message))
             }
-            _ => panic!("unexpected behavior");
+            _ => panic!("unexpected behavior"),
         }
     }
 }

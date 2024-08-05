@@ -79,6 +79,16 @@ async fn main() {
 
             println!("res: {}", res);
         }
+        Commands::Detach { id } => {
+            let req = QBControlRequest::Detach { id };
+            let mut conn = connect().await;
+            write(&mut conn, req).await;
+        }
+        Commands::Detach { id } => {
+            let req = QBControlRequest::Detach { id };
+            let mut conn = connect().await;
+            write(&mut conn, req).await;
+        }
         _ => unimplemented!(),
     };
 }

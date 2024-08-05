@@ -7,14 +7,14 @@ use bitcode::{Decode, Encode};
 
 use crate::{
     change::QBChange,
-    common::{hash::QBHash, id::QBID},
+    common::{hash::QBHash, id::QBId},
 };
 
 /// a bridge message
 #[derive(Debug, Clone, Encode, Decode)]
 pub struct BridgeMessage {
     /// the id of the caller
-    pub caller: QBID,
+    pub caller: QBId,
     /// the message
     pub msg: Vec<u8>,
 }

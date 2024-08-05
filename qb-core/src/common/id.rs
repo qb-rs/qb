@@ -1,4 +1,4 @@
-//! Ids are used to identify devices.
+//! Devices can be connected through with QBIs.
 
 use std::{
     fmt,
@@ -10,35 +10,57 @@ use hex::FromHexError;
 use lazy_static::lazy_static;
 use rand::Rng;
 
-/// struct which represents an id from a specific QBI connection
+/// struct which represents an id from a specific device
 #[derive(Encode, Decode, Debug, Clone, Default, Eq, PartialEq, Hash)]
-pub struct QBID(pub(crate) u64);
+pub struct QBId(pub(crate) u64);
 
-impl From<&str> for QBID {
+/// macro rule for trivially creating id kinds in newtype fashion
+#[macro_export]
+macro_rules! qbid {
+    ($name: ident) => {
+        #[derive(bitcode::Encode, bitcode::Decode, Debug, Clone, Default, Eq, PartialEq, Hash)]
+        pub struct $name(crate::common::id::QBId);
+
+        impl $name {
+            pub fn generate() -> Self {
+                Self(crate::common::id::QBId::generate())
+            }
+            pub fn to_hex(&self) -> String {
+                self.0.to_hex()
+            }
+
+            pub fn from_hex(hex: impl AsRef<str>) -> Result<Self, hex::FromHexError> {
+                Ok(Self(crate::common::id::QBId::from_hex(hex)?))
+            }
+        }
+    };
+}
+
+impl From<&str> for QBId {
     fn from(value: &str) -> Self {
         let mut hasher = DefaultHasher::new();
         value.hash(&mut hasher);
-        QBID(hasher.finish())
+        QBId(hasher.finish())
     }
 }
 
-impl fmt::Display for QBID {
+impl fmt::Display for QBId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_hex())
     }
 }
 
-impl AsRef<u64> for QBID {
+impl AsRef<u64> for QBId {
     fn as_ref(&self) -> &u64 {
         &self.0
     }
 }
 
-impl QBID {
+impl QBId {
     /// Generate a new ID
-    pub fn generate() -> QBID {
+    pub fn generate() -> Self {
         let mut rng = rand::thread_rng();
-        QBID(rng.gen::<u64>())
+        QBId(rng.gen::<u64>())
     }
 
     /// Get the string representation of this id in hex format
@@ -57,5 +79,5 @@ impl QBID {
 
 lazy_static! {
     /// the default id
-    pub static ref QBID_DEFAULT: QBID = QBID::default();
+    pub static ref QBID_DEFAULT: QBId = QBId::default();
 }

@@ -5,6 +5,7 @@
 
 use std::{collections::HashMap, path::Path, thread::JoinHandle, time::Duration};
 
+use common::{device::QBDeviceId, id::QBId};
 use tokio::{
     sync::mpsc,
     task::{AbortHandle, JoinSet},
@@ -12,7 +13,6 @@ use tokio::{
 use tracing::{info, span, trace, warn, Level};
 
 use change::log::QBChangelog;
-use common::id::QBID;
 use fs::QBFS;
 use interface::{
     protocol::{BridgeMessage, Message, QBIMessage, QBMessage},
@@ -25,6 +25,7 @@ pub mod fs;
 pub mod interface;
 
 struct QBIHandle {
+    device_id: QBDeviceId,
     join_handle: JoinHandle<()>,
     abort_handle: AbortHandle,
     tx: mpsc::Sender<QBMessage>,
@@ -32,7 +33,7 @@ struct QBIHandle {
 }
 
 struct Recv {
-    id: QBID,
+    id: QBId,
     rx: mpsc::Receiver<QBIMessage>,
     msg: Option<QBIMessage>,
 }
@@ -47,7 +48,7 @@ impl QBIHandle {
 /// the library core that controls the messaging between
 /// the master thread and the QBIs
 pub struct QB {
-    handles: HashMap<QBID, QBIHandle>,
+    handles: HashMap<QBId, QBIHandle>,
     fs: QBFS,
     recv_pool: JoinSet<Recv>,
     bridge_recv_pool: Vec<BridgeMessage>,
@@ -91,7 +92,7 @@ impl QB {
     }
 
     /// Receive a message
-    async fn recv(&mut self) -> Option<(QBID, QBIMessage)> {
+    async fn recv(&mut self) -> Option<(QBId, QBIMessage)> {
         loop {
             match self.recv_pool.join_next().await {
                 Some(Ok(Recv {
@@ -139,7 +140,7 @@ impl QB {
             let span = span!(Level::INFO, "qbi-process", id = id.to_hex());
             let _guard = span.enter();
 
-            let handle_common = self.fs.devices.get_common(id);
+            let handle_common = self.fs.devices.get_common(&handle.device_id);
 
             // SYNCHRONIZE
             if !handle.syncing && handle_common != &self.fs.changelog.head() {
@@ -163,7 +164,7 @@ impl QB {
         let span = span!(Level::INFO, "qbi-process", id = id.to_hex());
         let _guard = span.enter();
         let handle = self.handles.get_mut(&id).unwrap();
-        let handle_common = self.fs.devices.get_common(&id);
+        let handle_common = self.fs.devices.get_common(&handle.device_id);
 
         trace!("recv: {}", msg);
 
@@ -182,7 +183,7 @@ impl QB {
                 self.fs.apply_changes(fschanges).await.unwrap();
 
                 let new_common = self.fs.changelog.head();
-                self.fs.devices.set_common(&id, new_common);
+                self.fs.devices.set_common(&handle.device_id, new_common);
 
                 // Send sync to remote
                 if !handle.syncing {
@@ -199,7 +200,7 @@ impl QB {
                 self.fs.save().await.unwrap();
             }
             Message::Common { common } => {
-                self.fs.devices.set_common(&id, common);
+                self.fs.devices.set_common(&handle.device_id, common);
                 self.fs.save_devices().await.unwrap();
             }
             Message::Broadcast { msg } => broadcast.push(msg),
@@ -216,13 +217,12 @@ impl QB {
     }
 
     /// attach a QBI to the master
-    pub async fn attach<C, F, T>(&mut self, id: impl Into<QBID>, init: F, cx: C)
+    pub async fn attach<C, F, T>(&mut self, id: QBId, device_id: QBDeviceId, init: F, cx: C)
     where
         C: Sync + Send + 'static,
         T: interface::QBI<C>,
         F: FnOnce(C, QBICommunication) -> T + std::marker::Send + 'static,
     {
-        let id = id.into();
         let (main_tx, qbi_rx) = tokio::sync::mpsc::channel::<QBMessage>(32);
         let (qbi_tx, main_rx) = tokio::sync::mpsc::channel::<QBIMessage>(32);
 
@@ -253,13 +253,14 @@ impl QB {
                     .run()
                 }),
                 abort_handle,
+                device_id,
                 tx: main_tx,
             },
         );
     }
 
     /// detach the given interface and return a join handle
-    pub async fn detach(&mut self, id: &QBID) -> Option<std::thread::JoinHandle<()>> {
+    pub async fn detach(&mut self, id: &QBId) -> Option<std::thread::JoinHandle<()>> {
         let handle = self.handles.remove(id)?;
         handle.send(QBMessage::Stop).await;
 
@@ -268,8 +269,8 @@ impl QB {
 
     /// synchronize changes across all QBIs
     pub async fn sync(&mut self) {
-        for (id, handle) in self.handles.iter_mut() {
-            let handle_common = self.fs.devices.get_common(id);
+        for (_, handle) in self.handles.iter_mut() {
+            let handle_common = self.fs.devices.get_common(&handle.device_id);
 
             let changes = self.fs.changelog.after_cloned(handle_common).unwrap();
             if changes.is_empty() {
@@ -287,7 +288,7 @@ impl QB {
     }
 
     /// send a message to a QBI with the given id
-    pub async fn send(&self, id: &QBID, msg: impl Into<QBMessage>) {
+    pub async fn send(&self, id: &QBId, msg: impl Into<QBMessage>) {
         // TODO: error handling
         self.handles.get(id).unwrap().send(msg).await
     }
