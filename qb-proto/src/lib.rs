@@ -7,21 +7,45 @@ use simdutf8::basic::Utf8Error;
 use thiserror::Error;
 use url_search_params::{build_url_search_params, parse_url_search_params};
 
-/// A packet which has been read from the QBPReader.
-pub struct QBPPacket {
-    pub content: Vec<u8>,
-}
-
-/// An error which occured when trying to convert a packet into a QBPHeaderPacket
 #[derive(Error, Debug)]
-pub enum QBPHeaderError<'a> {
-    #[error("invalid packet size: {0}, minimum required: {0}")]
+pub enum Error {
+    /// An error occured while working with bitcode.
+    /// This could indicate, for example, that the
+    /// received payload was malformed, or encoded
+    /// in another content-type or content-encoding
+    /// than the one that was negotiated.
+    #[error("bitcode: {0}")]
+    BitcodeError(#[from] bitcode::Error),
+    /// An error occured while working with json.
+    /// This could indicate, for example, that the
+    /// received payload was malformed, or encoded
+    /// in another content-type or content-encoding
+    /// than the one that was negotiated.
+    #[error("json: {0}")]
+    JsonError(#[from] serde_json::Error),
+    /// An error occured while working with utf8.
+    /// This could indicate, for example, that the
+    /// received payload was malformed, or encoded
+    /// in another content-type or content-encoding
+    /// than the one that was negotiated.
+    #[error("utf8: {0}")]
+    Utf8Error(#[from] Utf8Error),
+    /// An error occured while
+    #[error("I/O error: {0}")]
+    IOError(#[from] std::io::Error),
+    #[error("invalid packet size: {0}, required: {0}")]
     InvalidPacketSize(usize, String),
-    #[error("invalid magic bytes: {0:?}, expected: {0:?}")]
-    InvalidMagicBytes(&'a [u8], &'a [u8]),
+    #[error("header contains invalid magic bytes: {0:?}, expected: {0:?}")]
+    InvalidMagicBytes(Vec<u8>, Vec<u8>),
     #[error("header str contains non ascii characters!")]
     NonAscii,
+    #[error("could not negotiate content type!")]
+    NegotiationFailed,
+    #[error("received EOF while reading")]
+    Closed,
 }
+
+type Result<T> = std::result::Result<T, Error>;
 
 /// The header packet which is used for content and version negotiation.
 pub struct QBPHeaderPacket {
@@ -34,37 +58,31 @@ pub struct QBPHeaderPacket {
 /// that the connected device actually communicates over QBP.
 pub const MAGIC_BYTES: [u8; 3] = *b"QBP";
 
-impl From<QBPHeaderPacket> for QBPPacket {
-    fn from(value: QBPHeaderPacket) -> Self {
-        value.serialize()
-    }
-}
-
 impl QBPHeaderPacket {
     /// Convert from a standard QBPPacket.
-    pub fn deserialize<'a>(packet: &'a QBPPacket) -> Result<Self, QBPHeaderError> {
+    pub fn deserialize<'a>(packet: &'a [u8]) -> Result<Self> {
         // check whether packet length is valid
-        if packet.content.len() < 5 {
-            return Err(QBPHeaderError::InvalidPacketSize(
-                packet.content.len(),
-                ">= 5".into(),
-            ));
+        if packet.len() < 5 {
+            return Err(Error::InvalidPacketSize(packet.len(), ">= 5".into()));
         }
 
         // check whether magic bytes are valid
-        let magic_bytes = &packet.content[0..3];
+        let magic_bytes = &packet[0..3];
         if magic_bytes != &MAGIC_BYTES {
-            return Err(QBPHeaderError::InvalidMagicBytes(magic_bytes, &MAGIC_BYTES));
+            return Err(Error::InvalidMagicBytes(
+                magic_bytes.into(),
+                MAGIC_BYTES.into(),
+            ));
         }
 
         // unwrap version
-        let major_byte = packet.content[3];
-        let minor_byte = packet.content[4];
+        let major_byte = packet[3];
+        let minor_byte = packet[4];
 
         // read headers
-        let head_bytes = &packet.content[5..];
+        let head_bytes = &packet[5..];
         if !head_bytes.is_ascii() {
-            return Err(QBPHeaderError::NonAscii);
+            return Err(Error::NonAscii);
         }
         let head = unsafe { std::str::from_utf8_unchecked(head_bytes) };
         let headers = parse_url_search_params(head);
@@ -77,7 +95,7 @@ impl QBPHeaderPacket {
     }
 
     /// Convert into a standard QBPPacket.
-    pub fn serialize(self) -> QBPPacket {
+    pub fn serialize(self) -> Vec<u8> {
         let head = build_url_search_params(self.headers);
         let head_bytes = head.as_bytes();
 
@@ -87,17 +105,18 @@ impl QBPHeaderPacket {
         content.push(self.minor_byte);
         content.extend_from_slice(&head_bytes);
 
-        QBPPacket { content }
+        content
     }
 }
 
-pub const SUPPORTED_CONTENT_TYPES: phf::OrderedMap<&'static str, ContentType> = phf_ordered_map! {
-    "application/bitcode" => ContentType::Bitcode,
-    "application/json" => ContentType::Json,
+/// The content types which this QBP supports.
+pub const SUPPORTED_CONTENT_TYPES: phf::OrderedMap<&'static str, QBPContentType> = phf_ordered_map! {
+    "application/bitcode" => QBPContentType::Bitcode,
+    "application/json" => QBPContentType::Json,
 };
 
 /// Negotiate the content-type.
-pub fn negotiate(headers: &HashMap<String, String>) -> Option<&ContentType> {
+pub fn negotiate(headers: &HashMap<String, String>) -> Option<QBPContentType> {
     let accept = headers.get("accept").unwrap();
     let accept = accept
         .split(',')
@@ -126,37 +145,63 @@ pub fn negotiate(headers: &HashMap<String, String>) -> Option<&ContentType> {
         SUPPORTED_CONTENT_TYPES
             .get(possible_canidates.first()?.0)
             .unwrap_unchecked()
+            .clone()
     })
 }
 
-pub enum ContentType {
+#[derive(Debug, Clone)]
+pub enum QBPContentType {
+    /// application/json
+    ///
+    /// Supported by most backends. Slower compared to
+    /// Bitcode and also includes schema, so it produces
+    /// larger messages as well.
     Json,
+    /// application/bitcode
+    ///
+    /// Supported only by rust backends, no support with
+    /// other programming languages. This normally is fast and
+    /// tiny compared to Json, which is why it is prefered.
     Bitcode,
 }
 
-#[derive(Error, Debug)]
-pub enum QBPMessageError {
-    #[error("bitcode: {0}")]
-    Bitcode(#[from] bitcode::Error),
-    #[error("json: {0}")]
-    Json(#[from] serde_json::Error),
-    #[error("utf8: {0}")]
-    Utf8(#[from] Utf8Error),
+impl QBPContentType {
+    /// Convert bytes of this content type to a message.
+    pub fn from_bytes<T>(&self, data: &[u8]) -> Result<T>
+    where
+        for<'a> T: QBPMessage<'a>,
+    {
+        Ok(match self {
+            QBPContentType::Json => T::from_json(data)?,
+            QBPContentType::Bitcode => T::from_bitcode(data)?,
+        })
+    }
+
+    /// Convert a message to bytes of this content type.
+    pub fn to_bytes<T>(&self, msg: T) -> Result<Vec<u8>>
+    where
+        for<'a> T: QBPMessage<'a>,
+    {
+        Ok(match self {
+            QBPContentType::Json => msg.to_json()?,
+            QBPContentType::Bitcode => msg.to_bitcode(),
+        })
+    }
 }
 
 pub trait QBPMessage<'a>: Encode + Decode<'a> + Serialize + Deserialize<'a> {
-    /// Parse a message from a json string.
-    fn from_json(data: &'a [u8]) -> Result<Self, QBPMessageError> {
+    /// Parse a message from an encoded json string.
+    fn from_json(data: &'a [u8]) -> Result<Self> {
         serde_json::from_str::<Self>(simdutf8::basic::from_utf8(data)?).map_err(|e| e.into())
     }
 
-    /// Dump a message into a json string.
-    fn to_json(&self) -> Result<String, QBPMessageError> {
-        serde_json::to_string(self).map_err(|e| e.into())
+    /// Dump a message into an encoded json string.
+    fn to_json(&self) -> Result<Vec<u8>> {
+        Ok(serde_json::to_string(self)?.into_bytes())
     }
 
     /// Parse a message from a bitcode binary.
-    fn from_bitcode(data: &'a [u8]) -> Result<Self, QBPMessageError> {
+    fn from_bitcode(data: &'a [u8]) -> Result<Self> {
         bitcode::decode(data).map_err(|e| e.into())
     }
 
@@ -166,34 +211,83 @@ pub trait QBPMessage<'a>: Encode + Decode<'a> + Serialize + Deserialize<'a> {
     }
 }
 
-// TODO: make this one no I/O and no std
+#[derive(Debug)]
+pub enum QBPState {
+    Initial,
+    /// Negotiation state. We need to negotiate
+    /// the content type and the content encoding
+    /// in order to send messages.
+    Negotiate,
+    /// Receive messages, after the content
+    /// type and encoding has been negotiated.
+    Messages(QBPContentType),
+}
+
+impl Default for QBPState {
+    fn default() -> Self {
+        Self::Negotiate
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct QBP {
-    content_type: ContentType,
-    reader: QBPReader,
+    pub state: QBPState,
+    pub reader: QBPReader,
 }
 
 impl QBP {
-    pub async fn read_async<R, T>(&mut self, read: &mut R) -> Result<T, QBPMessageError>
+    /// Update the connection. Returns a decoded
+    /// message, if any.
+    ///
+    /// # Cancelation Safety
+    /// This method is cancelation safe.
+    pub async fn update<R, W, T>(&mut self, read: &mut R, write: &mut W) -> Result<Option<T>>
     where
         R: tokio::io::AsyncReadExt + Unpin,
+        W: tokio::io::AsyncWriteExt + Unpin,
         for<'a> T: QBPMessage<'a>,
     {
-        let content = self.reader.read_async(read).await;
-        match self.content_type {
-            ContentType::Json => T::from_json(&content),
-            ContentType::Bitcode => T::from_bitcode(&content),
+        if let QBPState::Initial = self.state {
+            let header = QBPHeaderPacket {
+                major_byte: MAJOR_BYTE,
+                minor_byte: MINOR_BYTE,
+                headers: headers,
+            };
+
+            write.write(&header.serialize()).await?;
+            return Ok(None);
+        }
+
+        let packet = self.reader.read(read).await?;
+
+        match &self.state {
+            QBPState::Negotiate => {
+                let header = QBPHeaderPacket::deserialize(&packet)?;
+                let content_type = negotiate(&header.headers).ok_or(Error::NegotiationFailed)?;
+                self.state = QBPState::Messages(content_type);
+                Ok(None)
+            }
+            QBPState::Messages(content_type) => {
+                let message = content_type.from_bytes::<T>(&packet)?;
+                Ok(Some(message))
+            }
+            _ => panic!("unexpected behavior");
         }
     }
 }
 
-// TODO: make this one more extensible
+#[derive(Debug, Default)]
 pub struct QBPReader {
     len: Option<usize>,
     bytes: Vec<u8>,
 }
 
 impl QBPReader {
-    pub async fn read_async<R>(&mut self, read: &mut R) -> Vec<u8>
+    /// Read a packet.
+    ///
+    /// # Cancelation Safety
+    /// This method is cancelation safe.
+    pub async fn read<R>(&mut self, read: &mut R) -> Result<Vec<u8>>
     where
         R: tokio::io::AsyncReadExt + Unpin,
     {
@@ -202,7 +296,7 @@ impl QBPReader {
                 Some(len) => {
                     // read payload
                     if self.bytes.len() >= len {
-                        return self.bytes.drain(0..len).collect::<Vec<_>>();
+                        return Ok(self.bytes.drain(0..len).collect::<Vec<_>>());
                     }
                 }
                 None => {
@@ -216,9 +310,9 @@ impl QBPReader {
             }
 
             let mut bytes: [u8; 1024] = [0; 1024];
-            let len = read.read(&mut bytes).await.unwrap();
+            let len = read.read(&mut bytes).await?;
             if len == 0 {
-                todo!()
+                return Err(Error::Closed);
             }
             self.bytes.extend_from_slice(&bytes[0..len]);
         }
