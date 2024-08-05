@@ -41,8 +41,10 @@ pub enum Error {
     InvalidMagicBytes(Vec<u8>, Vec<u8>),
     #[error("header str contains non ascii characters!")]
     NonAscii,
-    #[error("could not negotiate content type!")]
-    NegotiationFailed,
+    #[error("could not negotiate {0}!")]
+    NegotiationFailed(String),
+    #[error("connection not ready yet!")]
+    NotReady,
     #[error("received EOF while reading")]
     Closed,
 }
@@ -127,7 +129,7 @@ impl QBPHeaderPacket {
 }
 
 /// Negotiate the content-type.
-pub fn negotiate(headers: &HashMap<String, String>) -> Option<QBPContentType> {
+pub fn negotiate_content_type(headers: &HashMap<String, String>) -> Option<QBPContentType> {
     let accept = headers.get("accept").unwrap();
     let accept = accept
         .split(',')
@@ -154,6 +156,40 @@ pub fn negotiate(headers: &HashMap<String, String>) -> Option<QBPContentType> {
 
     Some(unsafe {
         SUPPORTED_CONTENT_TYPES
+            .get(possible_canidates.first()?.0)
+            .unwrap_unchecked()
+            .clone()
+    })
+}
+
+/// Negotiate the content-encoding.
+pub fn negotiate_content_encoding(headers: &HashMap<String, String>) -> Option<QBPContentEncoding> {
+    let accept_encoding = headers.get("accept-encoding").unwrap();
+    let accept = accept_encoding
+        .split(',')
+        .enumerate()
+        .map(|(i, e)| (e.trim(), i))
+        .collect::<HashMap<&str, usize>>();
+
+    let mut possible_canidates: Vec<(&str, usize)> = Vec::new();
+
+    for (i, name) in SUPPORTED_CONTENT_ENCODINGS.keys().enumerate() {
+        if let Some(other_i) = accept.get(name) {
+            possible_canidates.push((name, i + other_i))
+        }
+    }
+
+    // This one sorts the possible canidates by the sum
+    // of the indicies (lower is better). If two entries
+    // have the same sum, we sort by name instead ('a...'
+    // is better than 'z...'). The best entry will be at index 0.
+    possible_canidates.sort_unstable_by(|a, b| match a.1.cmp(&b.1) {
+        std::cmp::Ordering::Equal => b.0.cmp(a.0),
+        v => v,
+    });
+
+    Some(unsafe {
+        SUPPORTED_CONTENT_ENCODINGS
             .get(possible_canidates.first()?.0)
             .unwrap_unchecked()
             .clone()
@@ -286,7 +322,10 @@ pub enum QBPState {
     Negotiate,
     /// Receive messages, after the content
     /// type and encoding has been negotiated.
-    Messages(QBPContentType),
+    Messages {
+        content_type: QBPContentType,
+        content_encoding: QBPContentEncoding,
+    },
 }
 
 impl Default for QBPState {
@@ -302,6 +341,36 @@ pub struct QBP {
 }
 
 impl QBP {
+    /// Returns whether this connection is ready,
+    /// which means that the content type and encoding
+    /// has been negotiated.
+    pub fn is_ready(&self) -> bool {
+        matches!(self.state, QBPState::Messages { .. })
+    }
+
+    /// Send a message through this protocol.
+    ///
+    /// # Cancelation Safety
+    /// This method is not cancel safe. It should always be awaited.
+    pub async fn send<W, T>(&mut self, write: &mut W, msg: T) -> Result<()>
+    where
+        W: tokio::io::AsyncWriteExt + Unpin,
+        for<'a> T: QBPMessage<'a>,
+    {
+        match &self.state {
+            QBPState::Messages {
+                content_type,
+                content_encoding,
+            } => {
+                let payload = content_type.to_bytes(msg)?;
+                let packet = content_encoding.encode(&payload);
+                write.write(&packet).await?;
+                Ok(())
+            }
+            _ => Err(Error::NotReady),
+        }
+    }
+
     /// Update the connection. Returns a decoded
     /// message, if any.
     ///
@@ -333,12 +402,22 @@ impl QBP {
         match &self.state {
             QBPState::Negotiate => {
                 let header = QBPHeaderPacket::deserialize(&packet)?;
-                let content_type = negotiate(&header.headers).ok_or(Error::NegotiationFailed)?;
-                self.state = QBPState::Messages(content_type);
+                let content_type = negotiate_content_type(&header.headers)
+                    .ok_or(Error::NegotiationFailed("content-type".into()))?;
+                let content_encoding = negotiate_content_encoding(&header.headers)
+                    .ok_or(Error::NegotiationFailed("content-encoding".into()))?;
+                self.state = QBPState::Messages {
+                    content_type,
+                    content_encoding,
+                };
                 Ok(None)
             }
-            QBPState::Messages(content_type) => {
-                let message = content_type.from_bytes::<T>(&packet)?;
+            QBPState::Messages {
+                content_type,
+                content_encoding,
+            } => {
+                let payload = content_encoding.decode(&packet);
+                let message = content_type.from_bytes::<T>(&payload)?;
                 Ok(Some(message))
             }
             _ => panic!("unexpected behavior"),
