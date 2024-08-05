@@ -12,6 +12,7 @@
 
 use bitcode::{Decode, Encode};
 use hex::FromHexError;
+use qb_proto::QBPBlob;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -163,6 +164,9 @@ pub trait QBIContext: Send + Sync {
     /// The main function of the QBI which will be spawned into a seperate
     /// async task (might be a thread, depends on how tokio handles this).
     fn run(self, com: QBICommunication) -> impl Future<Output = ()> + Send + 'static;
+
+    /// Setup this kind of QBI.
+    fn setup(blob: QBPBlob) -> impl Future<Output = (QBIId, Vec<u8>)> + Send + 'static;
 }
 
 /// struct describing the communication interface between QBI and master

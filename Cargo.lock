@@ -747,6 +747,7 @@ dependencies = [
  "ignore",
  "itertools",
  "lazy_static",
+ "qb-proto",
  "rand",
  "serde",
  "sha2",

@@ -19,3 +19,4 @@ time = { version = "0.3.36", features = ["macros", "formatting"] }
 tokio = { version = "1.37.0", features = ["rt", "sync"] }
 tracing = "0.1.40"
 waker-fn = "1.2.0"
+qb-proto = { path = "../qb-proto" }

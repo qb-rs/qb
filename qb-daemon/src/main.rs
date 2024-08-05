@@ -5,42 +5,32 @@ use qb_core::{
     interface::{QBIContext, QBIId},
     QB,
 };
-use qb_proto::QBPMessage;
-
-pub struct SetupBlob {
-    pub content_type: String,
-    pub content: Vec<u8>,
-}
-
-impl SetupBlob {
-    /// Deserialize this blob.
-    ///
-    /// This might throw an error if the content is malformed
-    /// or the content type is not supported.
-    pub fn deserialize<T>(&self) -> qb_proto::Result<T>
-    where
-        for<'a> T: QBPMessage<'a>,
-    {
-        match qb_proto::SUPPORTED_CONTENT_TYPES.get(&self.content_type) {
-            Some(content_type) => content_type.from_bytes(&self.content),
-            None => Err(qb_proto::Error::NegotiationFailed(format!(
-                "{} not supported!",
-                self.content_type
-            ))),
-        }
-    }
-}
+use qb_proto::QBPBlob;
 
 pub type StartFn = Box<dyn Fn(&mut QB, QBIId, &[u8])>;
-pub type SetupFn = Box<dyn Fn(SetupBlob) -> (QBIId, Vec<u8>)>;
+pub type SetupFn = Box<dyn Fn(QBPBlob) -> (QBIId, Vec<u8>)>;
+
+pub struct QBIDescriptior {
+    kind: String,
+    data: Vec<u8>,
+}
 
 pub struct QBDaemon {
-    qbi_kinds: HashMap<QBIId, String>,
+    qb: QB,
+    qbis: HashMap<QBIId, QBIDescriptior>,
     start_fns: HashMap<String, StartFn>,
     setup_fns: HashMap<String, SetupFn>,
 }
 
 impl QBDaemon {
+    /// Start a QBI by the given id.
+    pub fn start(&mut self, id: QBIId) {
+        let descriptor = self.qbis.get(&id).unwrap();
+        let start = self.start_fns.get(&descriptor.kind).unwrap();
+        start(&mut self.qb, id, &descriptor.data);
+    }
+
+    /// Register a QBI kind.
     pub fn register<T: QBIContext + DecodeOwned>(&mut self, name: String) {
         self.start_fns.insert(
             name,
@@ -51,5 +41,11 @@ impl QBDaemon {
                 runtime.block_on(qb.attach(id, bitcode::decode::<T>(data).unwrap()));
             }),
         );
+    }
+
+    /// Register the default QBI kinds.
+    pub fn register_default(&mut self) {
+        // self.register::<QBILocal>("local");
+        // self.register::<QBIGDrive>("gdrive");
     }
 }

@@ -51,6 +51,30 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
+pub struct QBPBlob {
+    pub content_type: String,
+    pub content: Vec<u8>,
+}
+
+impl QBPBlob {
+    /// Deserialize this blob.
+    ///
+    /// This might throw an error if the content is malformed
+    /// or the content type is not supported.
+    pub fn deserialize<T>(&self) -> Result<T>
+    where
+        for<'a> T: QBPMessage<'a>,
+    {
+        match SUPPORTED_CONTENT_TYPES.get(&self.content_type) {
+            Some(content_type) => content_type.from_bytes(&self.content),
+            None => Err(Error::NegotiationFailed(format!(
+                "{} not supported!",
+                self.content_type
+            ))),
+        }
+    }
+}
+
 /// The header packet which is used for content and version negotiation.
 pub struct QBPHeaderPacket {
     pub major_version: u8,
@@ -351,6 +375,54 @@ impl QBP {
         matches!(self.state, QBPState::Messages { .. })
     }
 
+    /// Send a packet through this protocol.
+    ///
+    /// # Cancelation Safety
+    /// This method is not cancel safe. It should always be awaited.
+    pub async fn send_packet<W>(&mut self, write: &mut W, packet: &[u8]) -> Result<()>
+    where
+        W: tokio::io::AsyncWriteExt + Unpin,
+    {
+        let len_bytes = (packet.len() as u64).to_be_bytes();
+        write.write_all(&len_bytes).await?;
+        write.write_all(&packet).await?;
+        Ok(())
+    }
+
+    /// Send a blob through this protocol.
+    ///
+    /// This should be pre-anounced, as if not,
+    /// the blob might be mistaken for a regular message.
+    ///
+    /// # Cancelation Safety
+    /// This method is not cancel safe. It should always be awaited.
+    pub async fn send_blob<W>(&mut self, write: &mut W, blob: QBPBlob) -> Result<()>
+    where
+        W: tokio::io::AsyncWriteExt + Unpin,
+    {
+        self.send_packet(write, blob.content_type.as_bytes())
+            .await?;
+        self.send_packet(write, &blob.content).await?;
+        Ok(())
+    }
+
+    /// Read a blob through this protocol.
+    ///
+    /// This should be pre-anounced, as if not,
+    /// we might mistake a regular message as a blob.
+    pub async fn read_blob<R>(&mut self, read: &mut R) -> Result<QBPBlob>
+    where
+        R: tokio::io::AsyncReadExt + Unpin,
+    {
+        let content_type = simdutf8::basic::from_utf8(&self.reader.read(read).await?)?.into();
+        let content = self.reader.read(read).await?;
+
+        Ok(QBPBlob {
+            content_type,
+            content,
+        })
+    }
+
     /// Send a message through this protocol.
     ///
     /// # Cancelation Safety
@@ -367,11 +439,7 @@ impl QBP {
             } => {
                 let payload = content_type.to_bytes(msg)?;
                 let packet = content_encoding.encode(&payload);
-                let len_bytes = (packet.len() as u64).to_be_bytes();
-                write.write_all(&len_bytes).await?;
-                write.write_all(&packet).await?;
-
-                Ok(())
+                self.send_packet(write, &packet).await
             }
             _ => Err(Error::NotReady),
         }
