@@ -364,7 +364,10 @@ impl QBP {
             } => {
                 let payload = content_type.to_bytes(msg)?;
                 let packet = content_encoding.encode(&payload);
-                write.write(&packet).await?;
+                let len_bytes = (packet.len() as u64).to_be_bytes();
+                write.write_all(&len_bytes).await?;
+                write.write_all(&packet).await?;
+
                 Ok(())
             }
             _ => Err(Error::NotReady),
