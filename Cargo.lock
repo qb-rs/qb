@@ -748,6 +748,7 @@ dependencies = [
  "itertools",
  "lazy_static",
  "rand",
+ "serde",
  "sha2",
  "simdutf8",
  "similar",

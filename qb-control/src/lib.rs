@@ -3,14 +3,51 @@ use std::{fmt, future::Future};
 use bitcode::{Decode, Encode};
 use msg::QBControlRequest;
 use qb_core::{
-    common::id::QBId,
-    interface::protocol::{BridgeMessage, Message},
+    interface::{QBIBridgeMessage, QBIHostMessage, QBIId},
     QB,
 };
 
 // re-export qbis
 pub use qbi_local;
-pub mod msg;
+
+use qb_core::common::id::QBId;
+use std::fmt;
+
+#[derive(Encode, Decode, Serialize, Deserialize)]
+pub enum QBControlRequest {
+    Start {
+        id: QBIId,
+    },
+    Stop {
+        id: QBIId,
+    },
+    /// Talk to the QBI
+    Bridge {
+        id: QBIId,
+        msg: Vec<u8>,
+    },
+}
+
+impl fmt::Display for QBControlRequest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            QBControlRequest::Start { id, .. } => {
+                write!(f, "MSG_CONTROL_REQ_START {}", id)
+            }
+            QBControlRequest::Stop { id } => {
+                write!(f, "MSG_CONTROL_REQ_STOP {}", id)
+            }
+            QBControlRequest::Bridge { id, msg } => {
+                write!(
+                    f,
+                    "MSG_CONTROL_REQ_BRIDGE {}: {}",
+                    id,
+                    simdutf8::basic::from_utf8(msg).unwrap_or("binary data")
+                )
+            }
+        }
+    }
+}
 
 pub trait ProcessQBControlRequest {
     fn process(&mut self, caller: QBId, request: QBControlRequest) -> impl Future<Output = ()>;
@@ -54,8 +91,11 @@ impl QBControlRequest {
                 qb.detach(&id).await.unwrap().join().unwrap();
             }
             QBControlRequest::Bridge { id, msg } => {
-                qb.send(&id, Message::Bridge(BridgeMessage { caller, msg }))
-                    .await;
+                qb.send(
+                    &id,
+                    QBIHostMessage::Bridge(QBIBridgeMessage { caller, msg }),
+                )
+                .await;
             }
         }
     }
