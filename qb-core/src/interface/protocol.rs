@@ -19,13 +19,9 @@ pub struct BridgeMessage {
     pub msg: Vec<u8>,
 }
 
-impl From<BridgeMessage> for Message {
-    fn from(val: BridgeMessage) -> Self {
-        Message::Bridge(val)
-    }
-}
-
-/// a message
+/// A message
+/// this is the struct that is used internally
+/// and externally for communicating with QBIs.
 #[derive(Debug, Clone, Encode, Decode)]
 pub enum Message {
     /// broadcast a message
@@ -46,9 +42,6 @@ pub enum Message {
         /// a vector describing the changes
         changes: Vec<QBChange>,
     },
-    /// allows the process connected to the
-    /// master to communicate with the qbi
-    Bridge(BridgeMessage),
 }
 
 impl fmt::Display for Message {
@@ -71,21 +64,13 @@ impl fmt::Display for Message {
             Message::Broadcast { msg } => {
                 write!(f, "MSG_BROADCAST {}", msg)
             }
-            Message::Bridge(BridgeMessage { caller: id, msg }) => {
-                write!(
-                    f,
-                    "MSG_BRIDGE from {}: {}",
-                    id,
-                    simdutf8::basic::from_utf8(msg).unwrap_or("binary data")
-                )
-            }
         }
     }
 }
 
 impl From<Message> for QBIMessage {
     fn from(val: Message) -> Self {
-        QBIMessage(val)
+        QBIMessage::Message(val)
     }
 }
 
@@ -97,13 +82,20 @@ impl From<Message> for QBMessage {
 
 /// a message coming from the QBI
 #[derive(Debug, Clone)]
-pub struct QBIMessage(pub Message);
+pub enum QBIMessage {
+    /// message
+    Message(Message),
+    /// allows the QBI to communicate with the application
+    Bridge(BridgeMessage),
+}
 
 /// a message coming from the master
 #[derive(Debug, Clone)]
 pub enum QBMessage {
     /// message
     Message(Message),
+    /// allows the QBI to communicate with the application
+    Bridge(BridgeMessage),
     /// stop the QBI
     Stop,
 }
