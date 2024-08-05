@@ -1,6 +1,6 @@
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::collections::HashMap;
 
-use phf::{phf_map, phf_ordered_map};
+use phf::phf_ordered_map;
 use thiserror::Error;
 use url_search_params::{build_url_search_params, parse_url_search_params};
 
@@ -95,12 +95,37 @@ pub const SUPPORTED_CONTENT_TYPES: phf::OrderedMap<&'static str, ContentType> = 
     "application/json" => ContentType::Json,
 };
 
-pub fn negotiate(headers: &HashMap<String, String>) {
+/// Negotiate the content-type.
+pub fn negotiate(headers: &HashMap<String, String>) -> Option<&ContentType> {
     let accept = headers.get("accept").unwrap();
-    let accept = accept.split(',').map(|e| e.trim()).collect::<BTreeSet<_>>();
-    let supports = SUPPORTED_CONTENT_TYPES.keys().collect::<BTreeSet<_>>();
+    let accept = accept
+        .split(',')
+        .enumerate()
+        .map(|(i, e)| (e.trim(), i))
+        .collect::<HashMap<&str, usize>>();
 
-    todo!()
+    let mut possible_canidates: Vec<(&str, usize)> = Vec::new();
+
+    for (i, name) in SUPPORTED_CONTENT_TYPES.keys().enumerate() {
+        if let Some(other) = accept.get(name) {
+            possible_canidates.push((name, i + other))
+        }
+    }
+
+    // This one sorts the possible canidates by the sum
+    // of the indicies (lower is better). If two entries
+    // have the same sum, we sort by name instead ('a...'
+    // is better than 'z...'). The best entry will be at index 0.
+    possible_canidates.sort_unstable_by(|a, b| match a.1.cmp(&b.1) {
+        std::cmp::Ordering::Equal => b.0.cmp(a.0),
+        v => v,
+    });
+
+    Some(unsafe {
+        SUPPORTED_CONTENT_TYPES
+            .get(possible_canidates.first()?.0)
+            .unwrap_unchecked()
+    })
 }
 
 pub enum ContentType {
