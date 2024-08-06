@@ -417,7 +417,7 @@ impl QBP {
     /// Send a binary payload through this protocol.
     ///
     /// # Cancelation Safety
-    /// This method is not cancel safe. It should always be awaited.
+    /// This method is cancelation safe.
     pub async fn send_payload(&mut self, write: &mut impl Write, payload: &[u8]) -> Result<()> {
         let (_, content_encoding) = self.get_content()?;
         let packet = content_encoding.encode(&payload);
@@ -438,7 +438,7 @@ impl QBP {
     /// Send a message through this protocol.
     ///
     /// # Cancelation Safety
-    /// This method is not cancel safe. It should always be awaited.
+    /// This method is cancelation safe.
     pub async fn send<T>(&mut self, write: &mut impl Write, msg: T) -> Result<()>
     where
         for<'a> T: QBPMessage<'a>,
