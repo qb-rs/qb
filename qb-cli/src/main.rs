@@ -1,4 +1,5 @@
 use core::panic;
+use std::{fs::File, sync::Arc};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use interprocess::local_socket::{traits::tokio::Stream, GenericNamespaced, ToNsName};
@@ -6,6 +7,8 @@ use qb_control::{QBControlRequest, QBControlResponse};
 use qb_core::interface::QBIId;
 use qb_proto::QBP;
 use tokio::io::AsyncReadExt;
+use tracing_panic::panic_hook;
+use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 type TStream = interprocess::local_socket::tokio::Stream;
 
@@ -59,6 +62,24 @@ fn parse_id(s: &str) -> Result<QBIId, String> {
 #[tokio::main]
 async fn main() {
     let args = Cli::parse();
+
+    std::panic::set_hook(Box::new(panic_hook));
+
+    let stdout_log = tracing_subscriber::fmt::layer().pretty();
+
+    // A layer that logs events to a file.
+    let file = File::create("debug.log").unwrap();
+    let debug_log = tracing_subscriber::fmt::layer()
+        .with_ansi(false)
+        .with_writer(Arc::new(file));
+
+    tracing_subscriber::registry()
+        .with(
+            stdout_log
+                .with_filter(filter::LevelFilter::TRACE)
+                .and_then(debug_log),
+        )
+        .init();
 
     match args.command {
         Commands::Bridge { id, msg } => {

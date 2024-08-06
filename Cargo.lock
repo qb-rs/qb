@@ -726,6 +726,9 @@ dependencies = [
  "qb-core",
  "qb-proto",
  "tokio",
+ "tracing",
+ "tracing-panic",
+ "tracing-subscriber",
 ]
 
 [[package]]
@@ -788,6 +791,7 @@ dependencies = [
  "simdutf8",
  "thiserror",
  "tokio",
+ "tracing",
  "url-search-params",
 ]
 

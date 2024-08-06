@@ -60,13 +60,11 @@ impl QBIId {
 
     /// Decode a hexadecimal string to an id
     pub fn from_hex(hex: impl AsRef<str>) -> Result<Self, FromHexError> {
-        let hex = hex.as_ref();
-        let device_id = QBDeviceId::from_hex(&hex[0..16])?;
-        let mut nonce_bytes = [0u8; 8];
-        hex::decode_to_slice(&hex[16..], &mut nonce_bytes)?;
+        let mut bytes = [0u8; 16];
+        hex::decode_to_slice(hex.as_ref(), &mut bytes)?;
         Ok(Self {
-            device_id,
-            nonce: u64::from_be_bytes(nonce_bytes),
+            device_id: QBDeviceId(u64::from_be_bytes(bytes[0..8].try_into().unwrap())),
+            nonce: u64::from_be_bytes(bytes[8..16].try_into().unwrap()),
         })
     }
 }

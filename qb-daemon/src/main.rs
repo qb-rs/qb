@@ -13,8 +13,8 @@ use qb_core::{
     QB,
 };
 use qb_proto::{QBPBlob, QBP};
-use tokio::sync::mpsc;
-use tracing::{span, trace, Level};
+use tokio::{io::AsyncWriteExt, sync::mpsc};
+use tracing::{span, trace, Instrument, Level};
 use tracing_panic::panic_hook;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
@@ -140,7 +140,7 @@ async fn main() {
     tracing_subscriber::registry()
         .with(
             stdout_log
-                .with_filter(filter::LevelFilter::INFO)
+                .with_filter(filter::LevelFilter::TRACE)
                 .and_then(debug_log),
         )
         .init();
@@ -216,19 +216,19 @@ async fn handle_run(mut init: HandleInit) -> qb_proto::Result<()> {
                 span.in_scope(|| {
                     trace!("send {}", response);
                 });
-                protocol.send(&mut init.conn, response).await?;
+                protocol.send(&mut init.conn, response).instrument(span.clone()).await?;
             }
-            res = protocol.update::<QBControlRequest>(&mut init.conn) => {
+            res = protocol.update::<QBControlRequest>(&mut init.conn).instrument(span.clone()) => {
                 match res {
                     Ok(msg) => {
                         let blob = match msg {
                             QBControlRequest::Setup { ref content_type, .. } => {
-                                let content = protocol.read_payload(&mut init.conn).await?;
+                                let content = protocol.read_payload(&mut init.conn).instrument(span.clone()).await?;
                                 Some(QBPBlob { content_type: content_type.clone(), content })
                             }
                             _ => None
                         };
-                        init.tx.send((init.id.clone(), msg, blob)).await.unwrap();
+                        init.tx.send((init.id.clone(), msg, blob)).instrument(span.clone()).await.unwrap();
                     }
                     Err(err) => return Err(err),
                 }

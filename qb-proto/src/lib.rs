@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use simdutf8::basic::Utf8Error;
 use thiserror::Error;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tracing::trace;
 use url_search_params::{build_url_search_params, parse_url_search_params};
 
 #[derive(Error, Debug)]
@@ -77,6 +78,7 @@ impl QBPBlob {
 }
 
 /// The header packet which is used for content and version negotiation.
+#[derive(Debug)]
 pub struct QBPHeaderPacket {
     pub major_version: u8,
     pub minor_version: u8,
@@ -150,6 +152,20 @@ impl QBPHeaderPacket {
         content.extend_from_slice(&head_bytes);
 
         content
+    }
+
+    /// Get the header packet for this device.
+    pub fn host() -> QBPHeaderPacket {
+        let mut headers = HashMap::new();
+        let accept = SUPPORTED_CONTENT_TYPES.keys().join(",");
+        headers.insert("accept".to_owned(), accept);
+        let accept_encoding = SUPPORTED_CONTENT_ENCODINGS.keys().join(",");
+        headers.insert("accept-encoding".to_owned(), accept_encoding);
+        QBPHeaderPacket {
+            major_version: MAJOR_VERSION,
+            minor_version: MINOR_VERSION,
+            headers,
+        }
     }
 }
 
@@ -504,23 +520,15 @@ impl QBP {
     where
         for<'a> T: QBPMessage<'a>,
     {
-        // flush the writer
-        self.writer.flush(conn).await?;
-
         // send header packet
         if let QBPState::Initial = self.state {
-            let mut headers = HashMap::new();
-            let accept = SUPPORTED_CONTENT_TYPES.keys().join(",");
-            headers.insert("accept".to_owned(), accept);
-            let header = QBPHeaderPacket {
-                major_version: MAJOR_VERSION,
-                minor_version: MINOR_VERSION,
-                headers,
-            };
-
             self.state = QBPState::Negotiate;
+            let header = QBPHeaderPacket::host();
             self.send_packet(conn, &header.serialize()).await?;
         }
+
+        // flush the writer
+        self.writer.flush(conn).await?;
 
         loop {
             let packet = self.read_packet(conn).await?;
@@ -528,6 +536,7 @@ impl QBP {
             match &self.state {
                 QBPState::Negotiate => {
                     let header = QBPHeaderPacket::deserialize(&packet)?;
+                    trace!("recv header: {:?}", header);
                     let content_type = negotiate_content_type(&header.headers)
                         .ok_or(Error::NegotiationFailed("content-type".into()))?;
                     let content_encoding = negotiate_content_encoding(&header.headers)
@@ -565,20 +574,13 @@ impl QBP {
     pub async fn negotiate(&mut self, conn: &mut impl ReadWrite) -> Result<()> {
         assert!(self.is_uninitialized());
 
-        let mut headers = HashMap::new();
-        let accept = SUPPORTED_CONTENT_TYPES.keys().join(",");
-        headers.insert("accept".to_owned(), accept);
-        let header = QBPHeaderPacket {
-            major_version: MAJOR_VERSION,
-            minor_version: MINOR_VERSION,
-            headers,
-        };
-
+        let header = QBPHeaderPacket::host();
         self.send_packet(conn, &header.serialize()).await?;
         self.state = QBPState::Negotiate;
 
         let packet = self.read_packet(conn).await?;
         let header = QBPHeaderPacket::deserialize(&packet)?;
+        trace!("recv header: {:?}", header);
         let content_type = negotiate_content_type(&header.headers)
             .ok_or(Error::NegotiationFailed("content-type".into()))?;
         let content_encoding = negotiate_content_encoding(&header.headers)
@@ -604,8 +606,10 @@ impl QBPWriter {
     /// # Cancelation Safety
     /// This method is cancelation safe.
     pub async fn write(&mut self, write: &mut impl Write, packet: &[u8]) -> Result<()> {
+        trace!("write: len {}", packet.len());
         let len_bytes = (packet.len() as u64).to_be_bytes();
         self.bytes.extend_from_slice(&len_bytes);
+        trace!("write: data");
         self.bytes.extend_from_slice(&packet);
         self.flush(write).await
     }
@@ -615,17 +619,20 @@ impl QBPWriter {
     /// # Cancelation Safety
     /// This method is cancelation safe.
     pub async fn flush(&mut self, write: &mut impl Write) -> Result<()> {
-        while self.bytes.len() - self.written > 0 {
+        trace!("write: bytes to flush: {}", self.bytes.len());
+        while self.bytes.len() > self.written {
             self.written += write.write(&self.bytes[self.written..]).await?;
         }
+        write.flush().await?;
         self.bytes.clear();
+        trace!("write: flush complete");
         Ok(())
     }
 }
 
 #[derive(Debug, Default)]
 struct QBPReader {
-    len: Option<usize>,
+    packet_len: Option<usize>,
     bytes: Vec<u8>,
 }
 
@@ -635,26 +642,43 @@ impl QBPReader {
     /// # Cancelation Safety
     /// This method is cancelation safe.
     pub async fn read(&mut self, read: &mut impl Read) -> Result<Vec<u8>> {
+        trace!("read: read packet");
         loop {
-            match self.len {
-                Some(len) => {
-                    // read payload
-                    if self.bytes.len() >= len {
-                        return Ok(self.bytes.drain(0..len).collect::<Vec<_>>());
+            // process loop
+            loop {
+                trace!("read: bytes in buffer {}", self.bytes.len());
+                match self.packet_len {
+                    Some(len) => {
+                        // read payload
+                        if self.bytes.len() >= len {
+                            trace!("read: complete");
+                            let packet = self.bytes.drain(0..len).collect::<Vec<_>>();
+                            self.packet_len = None;
+                            return Ok(packet);
+                        } else {
+                            break;
+                        }
                     }
-                }
-                None => {
-                    // read length
-                    if self.bytes.len() >= 8 {
-                        let mut len_bytes = [0u8; 8];
-                        len_bytes.copy_from_slice(&self.bytes);
-                        self.len = Some(u64::from_be_bytes(len_bytes) as usize);
+                    None => {
+                        // read length
+                        if self.bytes.len() >= 8 {
+                            let mut len_bytes = [0u8; 8];
+                            len_bytes.copy_from_slice(&self.bytes[0..8]);
+                            // remove len bytes from buffer
+                            self.bytes.drain(0..8);
+                            let len = u64::from_be_bytes(len_bytes) as usize;
+                            trace!("read: len: {}", len);
+                            self.packet_len = Some(len);
+                        } else {
+                            break;
+                        }
                     }
                 }
             }
 
             let mut bytes: [u8; 1024] = [0; 1024];
             let len = read.read(&mut bytes).await?;
+            trace!("read: read bytes from source: {}", len);
             if len == 0 {
                 return Err(Error::Closed);
             }
