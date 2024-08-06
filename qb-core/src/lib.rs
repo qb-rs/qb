@@ -249,7 +249,12 @@ impl QB {
         );
     }
 
-    /// detach the given interface and return a join handle
+    /// Returns whether an interface with the given id is attached to the master.
+    pub fn is_attached(&self, id: &QBIId) -> bool {
+        self.handles.contains_key(id)
+    }
+
+    /// Detach the given interface and return a join handle.
     pub async fn detach(&mut self, id: &QBIId) -> Option<JoinHandle<()>> {
         let handle = self.handles.remove(id)?;
         handle.send(QBIHostMessage::Stop).await;
@@ -257,7 +262,7 @@ impl QB {
         Some(handle.join_handle)
     }
 
-    /// synchronize changes across all QBIs
+    /// Synchronize changes across all QBIs.
     pub async fn sync(&mut self) {
         for (id, handle) in self.handles.iter_mut() {
             let handle_common = self.fs.devices.get_common(&id.device_id);
@@ -277,9 +282,8 @@ impl QB {
         }
     }
 
-    /// send a message to a QBI with the given id
+    /// Send a message to an interface with the given id.
     pub async fn send(&self, id: &QBIId, msg: impl Into<QBIHostMessage>) {
-        // TODO: error handling
         self.handles.get(id).unwrap().send(msg).await
     }
 }

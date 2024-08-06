@@ -1,8 +1,7 @@
 use core::panic;
-use std::{collections::HashMap, fs::File, future::Future, sync::Arc};
+use std::{collections::HashMap, fs::File, future::Future, pin::Pin, sync::Arc};
 
-use bitcode::DecodeOwned;
-use futures::future::BoxFuture;
+use bitcode::{Decode, DecodeOwned, Encode};
 use interprocess::local_socket::{
     tokio::Stream, traits::tokio::Listener, GenericNamespaced, ListenerNonblockingMode,
     ListenerOptions, ToNsName,
@@ -36,14 +35,10 @@ pub enum Error {
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-// TODO: asyncify these
-pub type StartFn<'a> = Box<dyn Fn(&mut QB, QBIId, Vec<u8>) -> BoxFuture<'a, ()>>;
-pub type SetupFn<'a> = Box<dyn Fn(QBPBlob) -> BoxFuture<'a, Result<(QBIId, Vec<u8>)>>>;
-
-pub struct QBIDescriptior {
-    name: String,
-    data: Vec<u8>,
-}
+pub type StartFn =
+    Box<dyn for<'a> Fn(&'a mut QB, QBIId, &'a [u8]) -> Pin<Box<dyn Future<Output = ()> + 'a>>>;
+pub type SetupFn =
+    Box<dyn Fn(QBPBlob) -> Pin<Box<dyn Future<Output = Result<(QBIId, Vec<u8>)>> + 'static>>>;
 
 pub struct Handle {
     tx: mpsc::Sender<QBControlResponse>,
@@ -66,24 +61,50 @@ pub struct HandleInit {
     rx: mpsc::Receiver<QBControlResponse>,
 }
 
-pub struct QBDaemon<'a> {
+#[derive(Encode, Decode)]
+pub struct QBIDescriptior {
+    name: String,
+    data: Vec<u8>,
+}
+
+#[derive(Encode, Decode, Default)]
+pub struct QBITable(HashMap<QBIId, QBIDescriptior>);
+
+impl QBITable {
+    /// Try to get an interface from this table by its id.
+    ///
+    /// Returns Error::NotFound if the interface does not
+    /// exist in this table.
+    pub fn get(&self, id: &QBIId) -> Result<&QBIDescriptior> {
+        self.0.get(id).ok_or(Error::NotFound)
+    }
+
+    /// Insert a new interface into this table.
+    pub fn insert(&mut self, id: QBIId, descriptor: QBIDescriptior) {
+        self.0.insert(id, descriptor);
+    }
+}
+
+pub struct QBDaemon {
     qb: QB,
-    qbis: HashMap<QBIId, QBIDescriptior>,
-    start_fns: HashMap<String, StartFn<'a>>,
-    setup_fns: HashMap<String, SetupFn<'a>>,
+    // "available QBIs" -> could be "attached" or "detached"
+    // => every QBI that is attached to the master must be in this map
+    qbi_table: QBITable,
+    start_fns: HashMap<String, StartFn>,
+    setup_fns: HashMap<String, SetupFn>,
 
     req_tx: mpsc::Sender<(QBId, QBControlRequest, Option<QBPBlob>)>,
     req_rx: mpsc::Receiver<(QBId, QBControlRequest, Option<QBPBlob>)>,
     handles: HashMap<QBId, Handle>,
 }
 
-impl<'a> QBDaemon<'a> {
+impl QBDaemon {
     /// Build the daemon
     pub fn init(qb: QB) -> Self {
         let (req_tx, req_rx) = mpsc::channel(10);
         Self {
             qb,
-            qbis: Default::default(),
+            qbi_table: Default::default(),
             start_fns: Default::default(),
             setup_fns: Default::default(),
             handles: Default::default(),
@@ -93,11 +114,11 @@ impl<'a> QBDaemon<'a> {
     }
 
     /// Start a QBI by the given id.
-    pub fn start(&mut self, id: QBIId) -> Result<()> {
-        let descriptor = self.qbis.get(&id).ok_or(Error::NotFound)?;
+    pub async fn start(&mut self, id: QBIId) -> Result<()> {
+        let descriptor = self.qbi_table.get(&id)?;
         let name = &descriptor.name;
         let start = self.start_fns.get(name).ok_or(Error::NotSupported)?;
-        start(&mut self.qb, id, descriptor.data.clone());
+        start(&mut self.qb, id, &descriptor.data).await;
         Ok(())
     }
 
@@ -110,14 +131,23 @@ impl<'a> QBDaemon<'a> {
     pub async fn setup(&mut self, name: String, blob: QBPBlob) -> Result<()> {
         let setup = self.setup_fns.get(&name).ok_or(Error::NotSupported)?;
         let (id, data) = setup(blob).await?;
-        self.qbis.insert(id, QBIDescriptior { name, data });
+        self.qbi_table.insert(id, QBIDescriptior { name, data });
         Ok(())
+    }
+
+    /// List the QBIs.
+    pub fn list(&self) -> Vec<(QBIId, String, bool)> {
+        self.qbi_table
+            .0
+            .iter()
+            .map(|(id, descriptor)| (id.clone(), descriptor.name.clone(), self.qb.is_attached(id)))
+            .collect()
     }
 
     /// Register a QBI kind.
     pub fn register<T>(&mut self, name: impl Into<String>)
     where
-        for<'b> T: QBIContext + QBISetup<'b> + DecodeOwned,
+        for<'a> T: QBIContext + QBISetup<'a> + DecodeOwned,
     {
         let name = name.into();
         self.start_fns.insert(
@@ -160,7 +190,7 @@ impl<'a> QBDaemon<'a> {
         blob: Option<QBPBlob>,
     ) -> Result<()> {
         match msg {
-            QBControlRequest::Start { id } => self.start(id)?,
+            QBControlRequest::Start { id } => self.start(id).await?,
             QBControlRequest::Stop { id } => self.stop(id).await?,
             QBControlRequest::Setup { name, .. } => {
                 let blob = blob.unwrap();
@@ -168,6 +198,12 @@ impl<'a> QBDaemon<'a> {
             }
             QBControlRequest::Bridge { id, msg } => {
                 self.qb.send(&id, QBIBridgeMessage { caller, msg }).await;
+            }
+            QBControlRequest::List => {
+                let handle = self.handles.get(&caller).unwrap();
+                handle
+                    .send(QBControlResponse::List { list: self.list() })
+                    .await;
             }
         };
 

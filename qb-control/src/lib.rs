@@ -24,6 +24,7 @@ pub enum QBControlRequest {
     Stop {
         id: QBIId,
     },
+    List,
     /// Talk to the QBI
     Bridge {
         id: QBIId,
@@ -43,6 +44,9 @@ impl fmt::Display for QBControlRequest {
             QBControlRequest::Stop { id } => {
                 write!(f, "MSG_CONTROL_REQ_STOP {}", id)
             }
+            QBControlRequest::List => {
+                write!(f, "MSG_CONTROL_REQ_LIST")
+            }
             QBControlRequest::Bridge { id, msg } => {
                 write!(
                     f,
@@ -59,6 +63,7 @@ impl fmt::Display for QBControlRequest {
 pub enum QBControlResponse {
     Bridge { msg: Vec<u8> },
     Error { msg: String },
+    List { list: Vec<(QBIId, String, bool)> },
     Success,
 }
 
@@ -77,6 +82,9 @@ impl fmt::Display for QBControlResponse {
             }
             QBControlResponse::Success => {
                 write!(f, "MSG_CONTROL_RESP_SUCCESS")
+            }
+            QBControlResponse::List { list } => {
+                write!(f, "MSG_CONTROL_RESP_LIST: {:#?}", list)
             }
         }
     }
