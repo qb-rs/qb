@@ -36,3 +36,7 @@ list indicies (the lower, the better). When we come uppon a pair with the same
 sum, we choose the preferred method by sorting with the name of the content type or
 encoding ("A..." is better than "Z..."). We can then just pick the best canidate
 for content type and content encoding, which will then be used going forward.
+
+----
+
+&copy; 2024 The QuixByte Project Authors
