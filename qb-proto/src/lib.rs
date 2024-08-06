@@ -92,8 +92,8 @@ pub const MINOR_VERSION: u8 = 0;
 
 /// The content types which this QBP supports.
 pub const SUPPORTED_CONTENT_TYPES: phf::OrderedMap<&'static str, QBPContentType> = phf_ordered_map! {
-    "application/bitcode" => QBPContentType::Bitcode,
     "application/json" => QBPContentType::Json,
+    "application/bitcode" => QBPContentType::Bitcode,
 };
 
 pub const SUPPORTED_CONTENT_ENCODINGS: phf::OrderedMap<&'static str, QBPContentEncoding> = phf_ordered_map! {

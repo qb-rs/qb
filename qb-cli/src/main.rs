@@ -76,7 +76,7 @@ async fn main() {
     tracing_subscriber::registry()
         .with(
             stdout_log
-                .with_filter(filter::LevelFilter::TRACE)
+                .with_filter(filter::LevelFilter::INFO)
                 .and_then(debug_log),
         )
         .init();
@@ -111,6 +111,11 @@ async fn main() {
             protocol.send(&mut conn, req).await.unwrap();
             protocol.send_payload(&mut conn, &content).await.unwrap();
             tokio::time::sleep(Duration::from_secs(1)).await;
+            let resp = protocol.read::<QBControlResponse>(&mut conn).await.unwrap();
+            match resp {
+                QBControlResponse::Success => {}
+                v => panic!("unexpected response: {}", v),
+            }
         }
         Commands::Start { id } => {
             let req = QBControlRequest::Start { id };
@@ -119,6 +124,11 @@ async fn main() {
             let mut protocol = QBP::default();
             protocol.negotiate(&mut conn).await.unwrap();
             protocol.send(&mut conn, req).await.unwrap();
+            let resp = protocol.read::<QBControlResponse>(&mut conn).await.unwrap();
+            match resp {
+                QBControlResponse::Success => {}
+                v => panic!("unexpected response: {}", v),
+            }
         }
         Commands::Stop { id } => {
             let req = QBControlRequest::Stop { id };
@@ -126,8 +136,34 @@ async fn main() {
             let mut protocol = QBP::default();
             protocol.negotiate(&mut conn).await.unwrap();
             protocol.send(&mut conn, req).await.unwrap();
+            let resp = protocol.read::<QBControlResponse>(&mut conn).await.unwrap();
+            match resp {
+                QBControlResponse::Success => {}
+                v => panic!("unexpected response: {}", v),
+            }
         }
-        _ => unimplemented!(),
+        Commands::List => {
+            let req = QBControlRequest::List;
+            let mut conn = connect().await;
+            let mut protocol = QBP::default();
+            protocol.negotiate(&mut conn).await.unwrap();
+            protocol.send(&mut conn, req).await.unwrap();
+            let resp = protocol.read::<QBControlResponse>(&mut conn).await.unwrap();
+            match resp {
+                QBControlResponse::List { list } => {
+                    for entry in list {
+                        print!("{} - {}", entry.0, entry.1);
+
+                        if entry.2 {
+                            print!(" - attached");
+                        }
+
+                        println!();
+                    }
+                }
+                v => panic!("unexpected response: {}", v),
+            }
+        }
     };
 }
 

@@ -175,12 +175,16 @@ impl QBDaemon {
         let resp = self._process(caller.clone(), msg, blob).await;
         let handle = self.handles.get(&caller).unwrap();
         match resp {
-            Ok(_) => handle.send(QBControlResponse::Success),
-            Err(err) => handle.send(QBControlResponse::Error {
-                msg: format!("{:?}", err),
-            }),
-        }
-        .await;
+            Ok(true) => handle.send(QBControlResponse::Success).await,
+            Ok(false) => {}
+            Err(err) => {
+                handle
+                    .send(QBControlResponse::Error {
+                        msg: format!("{:?}", err),
+                    })
+                    .await
+            }
+        };
     }
 
     async fn _process(
@@ -188,7 +192,7 @@ impl QBDaemon {
         caller: QBId,
         msg: QBControlRequest,
         blob: Option<QBPBlob>,
-    ) -> Result<()> {
+    ) -> Result<bool> {
         match msg {
             QBControlRequest::Start { id } => self.start(id).await?,
             QBControlRequest::Stop { id } => self.stop(id).await?,
@@ -198,16 +202,18 @@ impl QBDaemon {
             }
             QBControlRequest::Bridge { id, msg } => {
                 self.qb.send(&id, QBIBridgeMessage { caller, msg }).await;
+                return Ok(false);
             }
             QBControlRequest::List => {
                 let handle = self.handles.get(&caller).unwrap();
                 handle
                     .send(QBControlResponse::List { list: self.list() })
                     .await;
+                return Ok(false);
             }
         };
 
-        Ok(())
+        Ok(true)
     }
 
     pub async fn init_handle(&mut self, conn: Stream) {
