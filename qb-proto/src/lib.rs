@@ -1,3 +1,9 @@
+//! # qb-proto
+//!
+//! TODO: doc
+
+#![warn(missing_docs)]
+
 use std::collections::HashMap;
 
 use bitcode::{Decode, Encode};
@@ -9,6 +15,7 @@ use thiserror::Error;
 use tracing::trace;
 use url_search_params::{build_url_search_params, parse_url_search_params};
 
+/// This struct contains errors which may yield when working with QBP.
 #[derive(Error, Debug)]
 pub enum Error {
     /// An error occured while working with bitcode.
@@ -32,27 +39,45 @@ pub enum Error {
     /// than the one that was negotiated.
     #[error("utf8: {0}")]
     Utf8Error(#[from] Utf8Error),
-    /// An error occured while
+    /// An I/O error occured.
     #[error("I/O error: {0}")]
     IOError(#[from] std::io::Error),
+    /// Packet is of invalid size.
     #[error("invalid packet size: {0}, required: {0}")]
     InvalidPacketSize(usize, String),
+    /// Header packet contains invalid magic bytes.
     #[error("header contains invalid magic bytes: {0:?}, expected: {0:?}")]
     InvalidMagicBytes(Vec<u8>, Vec<u8>),
+    /// Header string contains non ascii characters.
     #[error("header str contains non ascii characters!")]
     NonAscii,
+    /// Content type and/or content encoding could not
+    /// be negotiated. This may be because the two peers
+    /// do not state support of a common content type and/or
+    /// encoding in the header packet.
+    /// Otherwise this is a bug.
     #[error("could not negotiate {0}!")]
     NegotiationFailed(String),
+    /// Connection has not been negotiated yet.
     #[error("connection not ready yet!")]
     NotReady,
+    /// Connection has been closed while negotiating.
     #[error("received EOF while reading")]
     Closed,
 }
 
+/// A result type alias for convenience.
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// A blob which can be sent over the protocol to allow different
+/// messages in a different content-type than negotiated.
+#[derive(Encode, Decode, Serialize, Deserialize)]
 pub struct QBPBlob {
+    /// The content type name. This should be a mime type string like
+    /// `application/json` or `application/bitcode`.
     pub content_type: String,
+    /// The actual content of this blob, which is in the format specified above.
+    #[serde(with = "serde_bytes")]
     pub content: Vec<u8>,
 }
 
@@ -78,8 +103,11 @@ impl QBPBlob {
 /// The header packet which is used for content and version negotiation.
 #[derive(Debug)]
 pub struct QBPHeaderPacket {
+    /// The major version of the QBP used to construct this packet.
     pub major_version: u8,
+    /// The minor version of the QBP used to construct this packet.
     pub minor_version: u8,
+    /// The headers of the QBP used to construct this packet.
     pub headers: HashMap<String, String>,
 }
 
@@ -87,7 +115,9 @@ pub struct QBPHeaderPacket {
 /// that the connected device actually communicates over QBP.
 pub const MAGIC_BYTES: [u8; 3] = *b"QBP";
 
+/// The major version of this QBP.
 pub const MAJOR_VERSION: u8 = 0;
+/// The minor version of this QBP.
 pub const MINOR_VERSION: u8 = 0;
 
 /// The content types which this QBP supports.
@@ -96,6 +126,7 @@ pub const SUPPORTED_CONTENT_TYPES: phf::OrderedMap<&'static str, QBPContentType>
     "application/json" => QBPContentType::Json,
 };
 
+/// The content encodings which this QBP supports.
 pub const SUPPORTED_CONTENT_ENCODINGS: phf::OrderedMap<&'static str, QBPContentEncoding> = phf_ordered_map! {
     "zlib" => QBPContentEncoding::Zlib,
     "gzip" => QBPContentEncoding::Gzip,
@@ -235,6 +266,8 @@ pub fn negotiate_content_encoding(headers: &HashMap<String, String>) -> Option<Q
     })
 }
 
+/// This struct describes a content encoding that can be negotiated
+/// in a QBP connection.
 #[derive(Debug, Clone)]
 pub enum QBPContentEncoding {
     /// Use zlib to (de)compress payloads.
@@ -314,6 +347,8 @@ mod encodeimpl {
     }
 }
 
+/// This struct describes a content type that can be negotiated
+/// in a QBP connection.
 #[derive(Debug, Clone)]
 pub enum QBPContentType {
     /// application/json
@@ -354,6 +389,7 @@ impl QBPContentType {
     }
 }
 
+/// The message utility trait
 pub trait QBPMessage<'a>: Encode + Decode<'a> + Serialize + Deserialize<'a> {
     /// Parse a message from an encoded json string.
     fn from_json(data: &'a [u8]) -> Result<Self> {
@@ -379,6 +415,7 @@ pub trait QBPMessage<'a>: Encode + Decode<'a> + Serialize + Deserialize<'a> {
 /// auto implement the message trait
 impl<'a, T> QBPMessage<'a> for T where T: Encode + Decode<'a> + Serialize + Deserialize<'a> {}
 
+/// This enum represents the state a QBP connection is in.
 #[derive(Debug)]
 pub enum QBPState {
     /// Initial state. We need to send the header
@@ -391,7 +428,9 @@ pub enum QBPState {
     /// Receive messages, after the content
     /// type and encoding has been negotiated.
     Messages {
+        /// the negotiated content_type
         content_type: QBPContentType,
+        /// the negotiated content_encoding
         content_encoding: QBPContentEncoding,
     },
 }
@@ -402,6 +441,7 @@ impl Default for QBPState {
     }
 }
 
+/// This struct represents a QBP connection.
 #[derive(Debug, Default)]
 pub struct QBP {
     state: QBPState,
@@ -409,12 +449,15 @@ pub struct QBP {
     writer: QBPWriter,
 }
 
+/// Utility trait for impl usage.
 pub trait Read: tokio::io::AsyncReadExt + Unpin {}
 impl<T> Read for T where T: tokio::io::AsyncReadExt + Unpin {}
 
+/// Utility trait for impl usage.
 pub trait Write: tokio::io::AsyncWriteExt + Unpin {}
 impl<T> Write for T where T: tokio::io::AsyncWriteExt + Unpin {}
 
+/// Utility trait for impl usage.
 pub trait ReadWrite: tokio::io::AsyncReadExt + tokio::io::AsyncWriteExt + Unpin {}
 impl<T> ReadWrite for T where T: tokio::io::AsyncReadExt + tokio::io::AsyncWriteExt + Unpin {}
 

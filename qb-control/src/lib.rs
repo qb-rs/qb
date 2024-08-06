@@ -1,89 +1,135 @@
+//! # qb-control
+//!
+//! This crate contains primitives for controllers of
+//! a daemon. That is, messages for controlling a daemon,
+//! as well as an identifier for controlling tasks.
+
+#![warn(missing_docs)]
+
 use std::fmt;
 
-// no to happy with this one. It kinda sucks
-
 use bitcode::{Decode, Encode};
+use hex::FromHexError;
 use qb_core::interface::QBIId;
 
-// re-export qbis
-pub use qbi_local;
+use qb_proto::QBPBlob;
 
+use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-#[derive(Encode, Decode, Serialize, Deserialize)]
-pub enum QBControlRequest {
-    /// This message packet must be followed by
-    /// a binary packet containing the setup contents.
-    Setup {
-        name: String,
-        content_type: String,
-    },
-    Start {
-        id: QBIId,
-    },
-    Stop {
-        id: QBIId,
-    },
-    List,
-    /// Talk to the QBI
-    Bridge {
-        id: QBIId,
-        msg: Vec<u8>,
-    },
+/// An identifier to a daemon control handle.
+#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+pub struct QBCId(pub(crate) u64);
+
+impl fmt::Display for QBCId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.to_hex())
+    }
 }
 
-impl fmt::Display for QBControlRequest {
+impl AsRef<u64> for QBCId {
+    fn as_ref(&self) -> &u64 {
+        &self.0
+    }
+}
+
+impl QBCId {
+    /// Generate a new ID
+    pub fn generate() -> Self {
+        let mut rng = rand::thread_rng();
+        Self(rng.gen::<u64>())
+    }
+
+    /// Get the string representation of this id in hex format
+    pub fn to_hex(&self) -> String {
+        let id_bytes = self.0.to_be_bytes();
+        hex::encode(id_bytes)
+    }
+
+    /// Decode a hexadecimal string to an id
+    pub fn from_hex(hex: impl AsRef<str>) -> Result<Self, FromHexError> {
+        let mut id_bytes: [u8; 8] = [0; 8];
+        hex::decode_to_slice(hex.as_ref(), &mut id_bytes)?;
+        Ok(Self(u64::from_be_bytes(id_bytes)))
+    }
+}
+
+/// A request comming from a controlling task.
+#[derive(Encode, Decode, Serialize, Deserialize)]
+pub enum QBCRequest {
+    /// Setup a new interface.
+    Setup {
+        /// The name of the interface kind ("gdrive", "local", ...)
+        name: String,
+        /// The setup blob
+        blob: QBPBlob,
+    },
+    /// Start an existing interface.
+    Start {
+        /// the identifier
+        id: QBIId,
+    },
+    /// Stop an existing interface.
+    Stop {
+        /// the identifier
+        id: QBIId,
+    },
+    /// List the available interfaces.
+    List,
+}
+
+impl fmt::Display for QBCRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            QBControlRequest::Setup { name, content_type } => {
-                write!(f, "MSG_CONTROL_REQ_SETUP {} {}", name, content_type)
-            }
-            QBControlRequest::Start { id } => {
-                write!(f, "MSG_CONTROL_REQ_START {}", id)
-            }
-            QBControlRequest::Stop { id } => {
-                write!(f, "MSG_CONTROL_REQ_STOP {}", id)
-            }
-            QBControlRequest::List => {
-                write!(f, "MSG_CONTROL_REQ_LIST")
-            }
-            QBControlRequest::Bridge { id, msg } => {
+            QBCRequest::Setup { name, blob } => {
                 write!(
                     f,
-                    "MSG_CONTROL_REQ_BRIDGE {}: {}",
-                    id,
-                    simdutf8::basic::from_utf8(msg).unwrap_or("binary data")
+                    "MSG_CONTROL_REQ_SETUP {} {} {}",
+                    name,
+                    blob.content_type,
+                    simdutf8::basic::from_utf8(&blob.content).unwrap_or("binary data")
                 )
+            }
+            QBCRequest::Start { id } => {
+                write!(f, "MSG_CONTROL_REQ_START {}", id)
+            }
+            QBCRequest::Stop { id } => {
+                write!(f, "MSG_CONTROL_REQ_STOP {}", id)
+            }
+            QBCRequest::List => {
+                write!(f, "MSG_CONTROL_REQ_LIST")
             }
         }
     }
 }
 
+/// A response comming from the daemon.
 #[derive(Encode, Decode, Serialize, Deserialize)]
-pub enum QBControlResponse {
-    Bridge { msg: Vec<u8> },
-    Error { msg: String },
-    List { list: Vec<(QBIId, String, bool)> },
+pub enum QBCResponse {
+    /// An error has occured.
+    Error {
+        /// The error message
+        msg: String,
+    },
+    /// Response for the list request.
+    List {
+        /// the available interfaces
+        list: Vec<(QBIId, String, bool)>,
+    },
+    /// Generic success request.
     Success,
 }
 
-impl fmt::Display for QBControlResponse {
+impl fmt::Display for QBCResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            QBControlResponse::Bridge { msg } => {
-                write!(
-                    f,
-                    "MSG_CONTROL_RESP_BRIDGE: {}",
-                    simdutf8::basic::from_utf8(msg).unwrap_or("binary data")
-                )
-            }
-            QBControlResponse::Error { msg } => {
+            QBCResponse::Error { msg } => {
                 write!(f, "MSG_CONTROL_RESP_ERROR: {}", msg)
             }
-            QBControlResponse::Success => {
+            QBCResponse::Success => {
                 write!(f, "MSG_CONTROL_RESP_SUCCESS")
             }
-            QBControlResponse::List { list } => {
+            QBCResponse::List { list } => {
                 write!(f, "MSG_CONTROL_RESP_LIST:")?;
                 for entry in list {
                     write!(f, "\n{} - {}", entry.0, entry.1)?;

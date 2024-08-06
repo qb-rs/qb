@@ -2,9 +2,9 @@ use std::{fs::File, sync::Arc};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use interprocess::local_socket::{traits::tokio::Stream, GenericNamespaced, ToNsName};
-use qb_control::{QBControlRequest, QBControlResponse};
+use qb_control::{QBCRequest, QBCResponse};
 use qb_core::interface::QBIId;
-use qb_proto::QBP;
+use qb_proto::{QBPBlob, QBP};
 use tokio::io::AsyncReadExt;
 use tracing_panic::panic_hook;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
@@ -23,29 +23,24 @@ struct Cli {
 enum Commands {
     /// List the connected QBIs
     List,
+    /// Setup a new interface
     Setup {
         name: String,
         #[arg(long = "type", default_value = "application/json")]
         content_type: String,
         content: Option<String>,
     },
+    /// Start an interface
     Start {
         /// the id of the QBI in hex format
         #[arg(long="id", value_parser=parse_id)]
         id: QBIId,
     },
+    /// Stop an interface
     Stop {
         /// the id of the QBI in hex format
         #[arg(long="id", value_parser=parse_id)]
         id: QBIId,
-    },
-    /// Send a message to a QBI
-    Bridge {
-        /// the id of the QBI in hex format
-        #[arg(long="id", value_parser=parse_id)]
-        id: QBIId,
-        /// the message (will read from stdin if left blank)
-        msg: Option<String>,
     },
 }
 
@@ -86,22 +81,6 @@ async fn main() {
 
 async fn process_args(args: Cli) -> Option<()> {
     match args.command {
-        Commands::Bridge { id, msg } => {
-            let msg = match msg {
-                Some(msg) => msg.into_bytes(),
-                None => {
-                    let mut buf = Vec::new();
-                    tokio::io::stdin().read_to_end(&mut buf).await.unwrap();
-                    buf
-                }
-            };
-            let req = QBControlRequest::Bridge { id, msg };
-            let mut conn = connect().await?;
-            let mut protocol = QBP::default();
-            protocol.negotiate(&mut conn).await.unwrap();
-            protocol.send(&mut conn, req).await.unwrap();
-            finish(protocol, conn).await;
-        }
         Commands::Setup {
             name,
             content_type,
@@ -115,17 +94,22 @@ async fn process_args(args: Cli) -> Option<()> {
                     buf
                 }
             };
-            let req = QBControlRequest::Setup { content_type, name };
+            let req = QBCRequest::Setup {
+                blob: QBPBlob {
+                    content_type,
+                    content,
+                },
+                name,
+            };
 
             let mut conn = connect().await?;
             let mut protocol = QBP::default();
             protocol.negotiate(&mut conn).await.unwrap();
             protocol.send(&mut conn, req).await.unwrap();
-            protocol.send_payload(&mut conn, &content).await.unwrap();
             finish(protocol, conn).await;
         }
         Commands::Start { id } => {
-            let req = QBControlRequest::Start { id };
+            let req = QBCRequest::Start { id };
 
             let mut conn = connect().await?;
             let mut protocol = QBP::default();
@@ -134,7 +118,7 @@ async fn process_args(args: Cli) -> Option<()> {
             finish(protocol, conn).await;
         }
         Commands::Stop { id } => {
-            let req = QBControlRequest::Stop { id };
+            let req = QBCRequest::Stop { id };
             let mut conn = connect().await?;
             let mut protocol = QBP::default();
             protocol.negotiate(&mut conn).await.unwrap();
@@ -142,7 +126,7 @@ async fn process_args(args: Cli) -> Option<()> {
             finish(protocol, conn).await;
         }
         Commands::List => {
-            let req = QBControlRequest::List;
+            let req = QBCRequest::List;
             let mut conn = connect().await?;
             let mut protocol = QBP::default();
             protocol.negotiate(&mut conn).await.unwrap();
@@ -155,9 +139,9 @@ async fn process_args(args: Cli) -> Option<()> {
 }
 
 async fn finish(mut protocol: QBP, mut conn: TStream) {
-    let resp = protocol.read::<QBControlResponse>(&mut conn).await.unwrap();
+    let resp = protocol.read::<QBCResponse>(&mut conn).await.unwrap();
     match resp {
-        QBControlResponse::Error { .. } => eprintln!("{}", resp),
+        QBCResponse::Error { .. } => eprintln!("{}", resp),
         _ => println!("{}", resp),
     }
 }

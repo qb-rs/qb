@@ -16,7 +16,7 @@ use wrapper::QBFSWrapper;
 use crate::{
     change::log::QBChangelog,
     common::{
-        device::QBDevices,
+        device::QBDeviceTable,
         diff::QBDiff,
         hash::QBHash,
         ignore::{QBIgnoreMap, QBIgnoreMapBuilder},
@@ -65,7 +65,7 @@ pub struct QBFS {
     /// the changelog
     pub changelog: QBChangelog,
     /// the devices
-    pub devices: QBDevices,
+    pub devices: QBDeviceTable,
     /// the ignore builder
     pub ignore_builder: QBIgnoreMapBuilder,
     /// the ignore
@@ -89,7 +89,7 @@ impl QBFS {
             .await;
         let ignore = ignore_builder.build(&table);
         let devices = wrapper
-            .load_or_default::<QBDevices>(qbpaths::INTERNAL_DEVICES.as_ref())
+            .load_or_default::<QBDeviceTable>(qbpaths::INTERNAL_DEVICES.as_ref())
             .await;
         let changelog = wrapper
             .load_or_default::<QBChangelog>(qbpaths::INTERNAL_CHANGELOG.as_ref())

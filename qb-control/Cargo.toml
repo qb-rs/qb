@@ -7,6 +7,8 @@ edition.workspace = true
 bitcode = "0.6.0"
 serde = { version = "1.0.204", features = ["derive"] }
 simdutf8 = "0.1.4"
+hex = "0.4.3"
+rand = "0.8.5"
+serde_bytes = "0.11.15"
 qb-core = { path = "../qb-core" }
-# qbi-rtc = { path = "../qbi-rtc" }
-qbi-local = { path = "../qbi-local" }
+qb-proto = { path = "../qb-proto" }

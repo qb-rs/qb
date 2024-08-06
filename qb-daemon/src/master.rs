@@ -8,7 +8,7 @@ use std::{collections::HashMap, time::Duration};
 
 use qb_core::{
     change::log::QBChangelog,
-    common::device::{QBDeviceId, QBDevices},
+    common::device::{QBDeviceId, QBDeviceTable},
     interface::{Message, QBICommunication, QBIContext, QBIHostMessage, QBIId, QBISlaveMessage},
 };
 use thiserror::Error;
@@ -61,7 +61,7 @@ impl QBIHandle {
 /// to the individual interfaces and manages communication.
 pub struct QBMaster {
     handles: HashMap<QBIId, QBIHandle>,
-    devices: QBDevices,
+    devices: QBDeviceTable,
     changelog: QBChangelog,
     device_id: QBDeviceId,
     recv_pool: JoinSet<Recv>,
@@ -136,27 +136,22 @@ impl QBMaster {
         }
     }
 
-    /// Update the master. This should be called whenever
-    /// possible in order to allow for quick communication.
-    /// It can be used inside a tokio::select! block to allow
-    /// for handling other concurrent events as well.
-    ///
     /// This will look for new messages from the interfaces and
     /// handle those respectively. Additionally this will
     /// synchronize when new changes arise.
     ///
     /// # Cancelation Safety
-    ///
-    /// This method is cancelation safe.
-    pub async fn update(&mut self) {
-        let mut broadcast = Vec::new();
+    /// This method is not cancelation safe.
+    pub async fn process(&mut self, (id, msg): (QBIId, QBISlaveMessage)) {
         self.clean_handles();
 
-        // process messages
-        let (id, msg) = match self.read().await {
-            // unwrap it
-            (id, QBISlaveMessage::Message(msg)) => (id, msg),
+        let mut broadcast = Vec::new();
+
+        // unwrap it
+        let msg = match msg {
+            QBISlaveMessage::Message(msg) => msg,
         };
+
         let span = info_span!("qbi-process", id = id.to_hex());
         let _guard = span.enter();
         let handle = self.handles.get_mut(&id).unwrap();

@@ -30,7 +30,7 @@ use crate::change::QB_CHANGELOG_BASE;
 use super::hash::QBHash;
 
 /// A device identifier.
-#[derive(Encode, Decode, Serialize, Deserialize, Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Encode, Decode, Serialize, Deserialize, Default, Debug, Clone, Eq, PartialEq, Hash)]
 pub struct QBDeviceId(pub(crate) u64);
 
 impl From<&str> for QBDeviceId {
@@ -76,12 +76,12 @@ impl QBDeviceId {
 
 /// struct that stores common changes and names for all connections
 #[derive(Encode, Decode, Debug, Clone, Default)]
-pub struct QBDevices {
+pub struct QBDeviceTable {
     commons: HashMap<QBDeviceId, QBHash>,
     names: HashMap<QBDeviceId, String>,
 }
 
-impl QBDevices {
+impl QBDeviceTable {
     /// Get the common hash of the connection with the id.
     pub fn get_common(&self, id: &QBDeviceId) -> &QBHash {
         self.commons.get(id).unwrap_or(QB_CHANGELOG_BASE.hash())
