@@ -69,7 +69,7 @@ impl Runner {
     }
 
     async fn on_message(&mut self, msg: Message) {
-        trace!("recv {}", msg);
+        info!("recv {}", msg);
 
         match msg {
             Message::Common { common } => {

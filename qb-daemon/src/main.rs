@@ -131,7 +131,9 @@ impl QBDaemon {
     pub async fn setup(&mut self, name: String, blob: QBPBlob) -> Result<()> {
         let setup = self.setup_fns.get(&name).ok_or(Error::NotSupported)?;
         let (id, data) = setup(blob).await?;
-        self.qbi_table.insert(id, QBIDescriptior { name, data });
+        self.qbi_table
+            .insert(id.clone(), QBIDescriptior { name, data });
+        self.start(id).await.unwrap();
         Ok(())
     }
 
@@ -248,7 +250,7 @@ async fn main() {
     tracing_subscriber::registry()
         .with(
             stdout_log
-                .with_filter(filter::LevelFilter::TRACE)
+                .with_filter(filter::LevelFilter::INFO)
                 .and_then(debug_log),
         )
         .init();

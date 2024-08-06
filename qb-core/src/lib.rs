@@ -28,6 +28,7 @@ struct QBIHandle {
     abort_handle: AbortHandle,
     tx: mpsc::Sender<QBIHostMessage>,
     syncing: bool,
+    init: bool,
 }
 
 struct Recv {
@@ -137,6 +138,10 @@ impl QB {
 
         // check for new changes. TODO: asyncify this
         for (id, handle) in self.handles.iter_mut() {
+            if !handle.init {
+                continue;
+            }
+
             let span = span!(Level::INFO, "qbi-process", id = id.to_hex());
             let _guard = span.enter();
 
@@ -170,7 +175,7 @@ impl QB {
         let handle = self.handles.get_mut(&id).unwrap();
         let handle_common = self.fs.devices.get_common(&id.device_id);
 
-        trace!("recv: {}", msg);
+        info!("recv: {}", msg);
 
         match msg {
             Message::Sync { common, changes } => {
@@ -204,6 +209,7 @@ impl QB {
                 self.fs.save().await.unwrap();
             }
             Message::Common { common } => {
+                handle.init = true;
                 self.fs.devices.set_common(&id.device_id, common);
                 self.fs.save_devices().await.unwrap();
             }
@@ -245,6 +251,7 @@ impl QB {
                 )),
                 abort_handle,
                 tx: main_tx,
+                init: false,
             },
         );
     }
@@ -265,6 +272,10 @@ impl QB {
     /// Synchronize changes across all QBIs.
     pub async fn sync(&mut self) {
         for (id, handle) in self.handles.iter_mut() {
+            if !handle.init {
+                continue;
+            }
+
             let handle_common = self.fs.devices.get_common(&id.device_id);
 
             let changes = self.fs.changelog.after_cloned(handle_common).unwrap();
