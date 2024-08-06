@@ -10,8 +10,11 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Encode, Decode, Serialize, Deserialize)]
 pub enum QBControlRequest {
+    /// This message packet must be followed by
+    /// a binary packet containing the setup contents.
     Setup {
         name: String,
+        content_type: String,
     },
     Start {
         id: QBIId,
@@ -29,8 +32,8 @@ pub enum QBControlRequest {
 impl fmt::Display for QBControlRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            QBControlRequest::Setup { name } => {
-                write!(f, "MSG_CONTROL_REQ_SETUP {}", name)
+            QBControlRequest::Setup { name, content_type } => {
+                write!(f, "MSG_CONTROL_REQ_SETUP {} {}", name, content_type)
             }
             QBControlRequest::Start { id } => {
                 write!(f, "MSG_CONTROL_REQ_START {}", id)

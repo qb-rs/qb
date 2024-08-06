@@ -96,7 +96,7 @@ impl QBDaemon {
         match msg {
             QBControlRequest::Start { id } => self.start(id),
             QBControlRequest::Stop { id } => self.stop(id).await,
-            QBControlRequest::Setup { name } => {
+            QBControlRequest::Setup { name, .. } => {
                 let blob = blob.unwrap();
                 self.setup(name, blob);
             }
@@ -220,16 +220,16 @@ async fn handle_run(mut init: HandleInit) -> qb_proto::Result<()> {
             }
             res = protocol.update::<QBControlRequest>(&mut init.conn) => {
                 match res {
-                    Ok(Some(msg)) => {
+                    Ok(msg) => {
                         let blob = match msg {
-                            QBControlRequest::Start { .. } => {
-                                Some(protocol.read_blob(&mut init.conn).await?)
+                            QBControlRequest::Setup { ref content_type, .. } => {
+                                let content = protocol.read_payload(&mut init.conn).await?;
+                                Some(QBPBlob { content_type: content_type.clone(), content })
                             }
                             _ => None
                         };
                         init.tx.send((init.id.clone(), msg, blob)).await.unwrap();
                     }
-                    Ok(None) => {},
                     Err(err) => return Err(err),
                 }
 

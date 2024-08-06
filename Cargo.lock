@@ -724,6 +724,7 @@ dependencies = [
  "interprocess",
  "qb-control",
  "qb-core",
+ "qb-proto",
  "tokio",
 ]
 
