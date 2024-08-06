@@ -242,7 +242,7 @@ async fn main() {
     let stdout_log = tracing_subscriber::fmt::layer().pretty();
 
     // A layer that logs events to a file.
-    let file = File::create("debug.log").unwrap();
+    let file = File::create("/tmp/qb-daemon.log").unwrap();
     let debug_log = tracing_subscriber::fmt::layer()
         .with_ansi(false)
         .with_writer(Arc::new(file));

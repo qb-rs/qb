@@ -10,7 +10,7 @@ use tokio::{
     sync::mpsc,
     task::{AbortHandle, JoinHandle, JoinSet},
 };
-use tracing::{info, span, trace, warn, Level};
+use tracing::{info, span, warn, Level};
 
 use change::log::QBChangelog;
 use fs::QBFS;
@@ -223,8 +223,12 @@ impl QB {
         }
     }
 
-    /// attach a QBI to the master
-    pub async fn attach(&mut self, id: QBIId, cx: impl QBIContext) {
+    /// Try to attach a QBI to the master. Returns none if already attached.
+    pub async fn attach(&mut self, id: QBIId, cx: impl QBIContext) -> Option<()> {
+        if self.is_attached(&id) {
+            return None;
+        }
+
         let (main_tx, qbi_rx) = tokio::sync::mpsc::channel::<QBIHostMessage>(32);
         let (qbi_tx, main_rx) = tokio::sync::mpsc::channel::<QBISlaveMessage>(32);
 
@@ -254,6 +258,8 @@ impl QB {
                 init: false,
             },
         );
+
+        Some(())
     }
 
     /// Returns whether an interface with the given id is attached to the master.

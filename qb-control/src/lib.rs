@@ -84,7 +84,16 @@ impl fmt::Display for QBControlResponse {
                 write!(f, "MSG_CONTROL_RESP_SUCCESS")
             }
             QBControlResponse::List { list } => {
-                write!(f, "MSG_CONTROL_RESP_LIST: {:#?}", list)
+                write!(f, "MSG_CONTROL_RESP_LIST:")?;
+                for entry in list {
+                    write!(f, "\n{} - {}", entry.0, entry.1)?;
+
+                    if entry.2 {
+                        write!(f, " - attached")?;
+                    }
+                }
+
+                Ok(())
             }
         }
     }

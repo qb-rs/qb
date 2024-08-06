@@ -1,4 +1,3 @@
-use core::panic;
 use std::{fs::File, sync::Arc};
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -69,7 +68,7 @@ async fn main() {
     let stdout_log = tracing_subscriber::fmt::layer().pretty();
 
     // A layer that logs events to a file.
-    let file = File::create("debug.log").unwrap();
+    let file = File::create("/tmp/qb-cli.log").unwrap();
     let debug_log = tracing_subscriber::fmt::layer()
         .with_ansi(false)
         .with_writer(Arc::new(file));
@@ -82,6 +81,10 @@ async fn main() {
         )
         .init();
 
+    process_args(args).await;
+}
+
+async fn process_args(args: Cli) -> Option<()> {
     match args.command {
         Commands::Bridge { id, msg } => {
             let msg = match msg {
@@ -93,13 +96,11 @@ async fn main() {
                 }
             };
             let req = QBControlRequest::Bridge { id, msg };
-            let mut conn = connect().await;
+            let mut conn = connect().await?;
             let mut protocol = QBP::default();
             protocol.negotiate(&mut conn).await.unwrap();
             protocol.send(&mut conn, req).await.unwrap();
-            let res = protocol.read::<QBControlResponse>(&mut conn).await.unwrap();
-
-            println!("res: {}", res);
+            finish(protocol, conn).await;
         }
         Commands::Setup {
             name,
@@ -116,79 +117,62 @@ async fn main() {
             };
             let req = QBControlRequest::Setup { content_type, name };
 
-            let mut conn = connect().await;
+            let mut conn = connect().await?;
             let mut protocol = QBP::default();
             protocol.negotiate(&mut conn).await.unwrap();
             protocol.send(&mut conn, req).await.unwrap();
             protocol.send_payload(&mut conn, &content).await.unwrap();
-            let resp = protocol.read::<QBControlResponse>(&mut conn).await.unwrap();
-            match resp {
-                QBControlResponse::Success => {}
-                v => eprintln!("unexpected response: {}", v),
-            }
+            finish(protocol, conn).await;
         }
         Commands::Start { id } => {
             let req = QBControlRequest::Start { id };
 
-            let mut conn = connect().await;
+            let mut conn = connect().await?;
             let mut protocol = QBP::default();
             protocol.negotiate(&mut conn).await.unwrap();
             protocol.send(&mut conn, req).await.unwrap();
-            let resp = protocol.read::<QBControlResponse>(&mut conn).await.unwrap();
-            match resp {
-                QBControlResponse::Success => {}
-                v => eprintln!("unexpected response: {}", v),
-            }
+            finish(protocol, conn).await;
         }
         Commands::Stop { id } => {
             let req = QBControlRequest::Stop { id };
-            let mut conn = connect().await;
+            let mut conn = connect().await?;
             let mut protocol = QBP::default();
             protocol.negotiate(&mut conn).await.unwrap();
             protocol.send(&mut conn, req).await.unwrap();
-            let resp = protocol.read::<QBControlResponse>(&mut conn).await.unwrap();
-            match resp {
-                QBControlResponse::Success => {}
-                v => eprintln!("unexpected response: {}", v),
-            }
+            finish(protocol, conn).await;
         }
         Commands::List => {
             let req = QBControlRequest::List;
-            let mut conn = connect().await;
+            let mut conn = connect().await?;
             let mut protocol = QBP::default();
             protocol.negotiate(&mut conn).await.unwrap();
             protocol.send(&mut conn, req).await.unwrap();
-            let resp = protocol.read::<QBControlResponse>(&mut conn).await.unwrap();
-            match resp {
-                QBControlResponse::List { list } => {
-                    for entry in list {
-                        print!("{} - {}", entry.0, entry.1);
-
-                        if entry.2 {
-                            print!(" - attached");
-                        }
-
-                        println!();
-                    }
-                }
-                v => eprintln!("unexpected response: {}", v),
-            }
+            finish(protocol, conn).await;
         }
     };
+
+    Some(())
 }
 
-async fn connect() -> TStream {
+async fn finish(mut protocol: QBP, mut conn: TStream) {
+    let resp = protocol.read::<QBControlResponse>(&mut conn).await.unwrap();
+    match resp {
+        QBControlResponse::Error { .. } => eprintln!("{}", resp),
+        _ => println!("{}", resp),
+    }
+}
+
+async fn connect() -> Option<TStream> {
     let name = "qb-daemon.sock";
     let name = name.to_ns_name::<GenericNamespaced>().unwrap();
 
     let connection = match TStream::connect(name).await {
         Ok(conn) => conn,
         Err(err) => {
-            panic!("could not connect to daemon socket: {}", err);
+            eprintln!("could not connect to daemon socket: {}", err);
+            return None;
         }
     };
 
-    println!("connected to daemon!");
-
-    connection
+    Some(connection)
 }

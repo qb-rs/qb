@@ -92,8 +92,8 @@ pub const MINOR_VERSION: u8 = 0;
 
 /// The content types which this QBP supports.
 pub const SUPPORTED_CONTENT_TYPES: phf::OrderedMap<&'static str, QBPContentType> = phf_ordered_map! {
-    "application/json" => QBPContentType::Json,
     "application/bitcode" => QBPContentType::Bitcode,
+    "application/json" => QBPContentType::Json,
 };
 
 pub const SUPPORTED_CONTENT_ENCODINGS: phf::OrderedMap<&'static str, QBPContentEncoding> = phf_ordered_map! {
@@ -630,7 +630,7 @@ impl QBPWriter {
     /// # Cancelation Safety
     /// This method is cancelation safe.
     pub async fn write(&mut self, write: &mut impl Write, packet: &[u8]) -> Result<()> {
-        trace!("write: len {}", packet.len());
+        trace!("write: len {}:", packet.len());
         let len_bytes = (packet.len() as u64).to_be_bytes();
         self.bytes.extend_from_slice(&len_bytes);
         trace!("write: data");

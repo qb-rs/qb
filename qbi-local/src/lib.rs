@@ -18,7 +18,7 @@ use qb_core::{
     },
 };
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info, trace};
+use tracing::{debug, info};
 
 #[derive(Encode, Decode, Serialize, Deserialize)]
 pub struct QBILocal {
