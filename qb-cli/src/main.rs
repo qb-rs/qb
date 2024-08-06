@@ -1,5 +1,5 @@
 use core::panic;
-use std::{fs::File, sync::Arc};
+use std::{fs::File, sync::Arc, time::Duration};
 
 use clap::{Parser, Subcommand, ValueEnum};
 use interprocess::local_socket::{traits::tokio::Stream, GenericNamespaced, ToNsName};
@@ -118,6 +118,7 @@ async fn main() {
             let mut protocol = QBP::default();
             protocol.negotiate(&mut conn).await.unwrap();
             protocol.send(&mut conn, req).await.unwrap();
+            tokio::time::sleep(Duration::from_secs(10)).await;
         }
         Commands::Stop { id } => {
             let req = QBControlRequest::Stop { id };

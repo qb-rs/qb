@@ -13,8 +13,8 @@ use qb_core::{
     QB,
 };
 use qb_proto::{QBPBlob, QBP};
-use tokio::{io::AsyncWriteExt, sync::mpsc};
-use tracing::{span, trace, Instrument, Level};
+use tokio::sync::mpsc;
+use tracing::{span, trace, warn, Instrument, Level};
 use tracing_panic::panic_hook;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
@@ -194,7 +194,15 @@ async fn main() {
                     id,
                 };
 
-                tokio::spawn(handle_run(init));
+                tokio::spawn(async move {
+                    let span = span!(Level::TRACE, "handle", id = init.id.to_hex());
+                    match handle_run(init).await {
+                        Err(err) => span.in_scope(|| {
+                            warn!("handle finished with error: {:?}", err)
+                        }),
+                        Ok(_) => {}
+                    }
+                });
             }
         }
     }

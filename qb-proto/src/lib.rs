@@ -247,6 +247,7 @@ pub enum QBPContentEncoding {
 impl QBPContentEncoding {
     /// Encode a blob of data using this encoding.
     pub fn encode(&self, data: &[u8]) -> Vec<u8> {
+        trace!("decode: encoding data: {}", data.len());
         match self {
             QBPContentEncoding::BZip2 => Self::_encode(data, BZip2Encoder::new(9)),
             QBPContentEncoding::GZip => Self::_encode(data, GZipEncoder::new()),
@@ -269,6 +270,7 @@ impl QBPContentEncoding {
 
     /// Decode a blob of data using this encoding.
     pub fn decode(&self, data: &[u8]) -> Vec<u8> {
+        trace!("decode: decoding data: {}", data.len());
         match self {
             QBPContentEncoding::BZip2 => Self::_decode(data, BZip2Decoder::new()),
             QBPContentEncoding::GZip => Self::_decode(data, GZipDecoder::new()),
@@ -621,10 +623,13 @@ impl QBPWriter {
     pub async fn flush(&mut self, write: &mut impl Write) -> Result<()> {
         trace!("write: bytes to flush: {}", self.bytes.len());
         while self.bytes.len() > self.written {
-            self.written += write.write(&self.bytes[self.written..]).await?;
+            let len = write.write(&self.bytes[self.written..]).await?;
+            trace!("write: wrote bytes: {}", len);
+            self.written += len;
         }
         write.flush().await?;
         self.bytes.clear();
+        self.written = 0;
         trace!("write: flush complete");
         Ok(())
     }
@@ -676,6 +681,7 @@ impl QBPReader {
                 }
             }
 
+            // read data
             let mut bytes: [u8; 1024] = [0; 1024];
             let len = read.read(&mut bytes).await?;
             trace!("read: read bytes from source: {}", len);
