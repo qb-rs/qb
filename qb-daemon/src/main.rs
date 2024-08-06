@@ -1,5 +1,9 @@
 use core::panic;
-use std::{collections::HashMap, fs::File, future::Future, pin::Pin, sync::Arc};
+use std::{collections::HashMap, future::Future, pin::Pin, sync::Arc};
+use tokio::{
+    fs::File,
+    io::{AsyncReadExt, AsyncWriteExt},
+};
 
 use bitcode::{Decode, DecodeOwned, Encode};
 use interprocess::local_socket::{
@@ -85,29 +89,38 @@ impl QBITable {
     }
 }
 
+#[derive(Encode, Decode, Default)]
+pub struct QBDaemonConfig {
+    qbi_table: QBITable,
+    autostart: Vec<QBIId>,
+}
+
 pub struct QBDaemon {
     qb: QB,
     // "available QBIs" -> could be "attached" or "detached"
     // => every QBI that is attached to the master must be in this map
-    qbi_table: QBITable,
     start_fns: HashMap<String, StartFn>,
     setup_fns: HashMap<String, SetupFn>,
+    config: QBDaemonConfig,
 
     req_tx: mpsc::Sender<(QBId, QBControlRequest, Option<QBPBlob>)>,
     req_rx: mpsc::Receiver<(QBId, QBControlRequest, Option<QBPBlob>)>,
     handles: HashMap<QBId, Handle>,
 }
 
+pub const CONFIG_PATH: &'static str = "./qb-daemon.bin";
+
 impl QBDaemon {
     /// Build the daemon
-    pub fn init(qb: QB) -> Self {
+    pub async fn init(qb: QB) -> Self {
         let (req_tx, req_rx) = mpsc::channel(10);
+        let config = Self::load_conf().await;
         Self {
             qb,
-            qbi_table: Default::default(),
             start_fns: Default::default(),
             setup_fns: Default::default(),
             handles: Default::default(),
+            config,
             req_tx,
             req_rx,
         }
@@ -115,7 +128,7 @@ impl QBDaemon {
 
     /// Start a QBI by the given id.
     pub async fn start(&mut self, id: QBIId) -> Result<()> {
-        let descriptor = self.qbi_table.get(&id)?;
+        let descriptor = self.config.qbi_table.get(&id)?;
         let name = &descriptor.name;
         let start = self.start_fns.get(name).ok_or(Error::NotSupported)?;
         start(&mut self.qb, id, &descriptor.data).await;
@@ -128,18 +141,43 @@ impl QBDaemon {
         Ok(())
     }
 
+    pub async fn save_conf(&mut self) {
+        let content = bitcode::encode(&self.config);
+        let mut conf_file = File::create(CONFIG_PATH).await.unwrap();
+        conf_file.write_all(&content).await.unwrap();
+    }
+
+    pub async fn load_conf() -> QBDaemonConfig {
+        let exists = match tokio::fs::metadata(CONFIG_PATH).await {
+            Ok(meta) => meta.is_file(),
+            Err(_) => false,
+        };
+
+        if exists {
+            let mut conf_file = File::open(CONFIG_PATH).await.unwrap();
+            let mut contents = Vec::new();
+            conf_file.read_to_end(&mut contents).await.unwrap();
+            bitcode::decode(&contents).unwrap()
+        } else {
+            Default::default()
+        }
+    }
+
     pub async fn setup(&mut self, name: String, blob: QBPBlob) -> Result<()> {
         let setup = self.setup_fns.get(&name).ok_or(Error::NotSupported)?;
         let (id, data) = setup(blob).await?;
-        self.qbi_table
+        self.config
+            .qbi_table
             .insert(id.clone(), QBIDescriptior { name, data });
+        self.save_conf().await;
         self.start(id).await.unwrap();
         Ok(())
     }
 
     /// List the QBIs.
     pub fn list(&self) -> Vec<(QBIId, String, bool)> {
-        self.qbi_table
+        self.config
+            .qbi_table
             .0
             .iter()
             .map(|(id, descriptor)| (id.clone(), descriptor.name.clone(), self.qb.is_attached(id)))
@@ -242,7 +280,7 @@ async fn main() {
     let stdout_log = tracing_subscriber::fmt::layer().pretty();
 
     // A layer that logs events to a file.
-    let file = File::create("/tmp/qb-daemon.log").unwrap();
+    let file = std::fs::File::create("/tmp/qb-daemon.log").unwrap();
     let debug_log = tracing_subscriber::fmt::layer()
         .with_ansi(false)
         .with_writer(Arc::new(file));
@@ -267,7 +305,7 @@ async fn main() {
     let qb = QB::init("./local").await;
 
     // Setup the daemon
-    let mut daemon = QBDaemon::init(qb);
+    let mut daemon = QBDaemon::init(qb).await;
     daemon.register::<QBILocal>("local");
 
     // Process
