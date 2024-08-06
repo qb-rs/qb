@@ -247,6 +247,7 @@ pub enum QBPContentEncoding {
 impl QBPContentEncoding {
     /// Encode a blob of data using this encoding.
     pub fn encode(&self, data: &[u8]) -> Vec<u8> {
+        return data.into();
         trace!("decode: encoding data: {}", data.len());
         match self {
             QBPContentEncoding::BZip2 => Self::_encode(data, BZip2Encoder::new(9)),
@@ -270,6 +271,7 @@ impl QBPContentEncoding {
 
     /// Decode a blob of data using this encoding.
     pub fn decode(&self, data: &[u8]) -> Vec<u8> {
+        return data.into();
         trace!("decode: decoding data: {}", data.len());
         match self {
             QBPContentEncoding::BZip2 => Self::_decode(data, BZip2Decoder::new()),
