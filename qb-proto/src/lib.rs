@@ -379,6 +379,18 @@ pub trait ReadWrite: AsyncReadExt + AsyncWriteExt + Unpin {}
 impl<T> ReadWrite for T where T: AsyncReadExt + AsyncWriteExt + Unpin {}
 
 impl QBP {
+    /// Returns whether this connection is unitialized,
+    /// which means that no negotiation request has been sent yet.
+    pub fn is_uninitialized(&self) -> bool {
+        matches!(self.state, QBPState::Initial)
+    }
+
+    /// Returns whether this connection is negotiating a
+    /// common content type and encoding.
+    pub fn is_negotiating(&self) -> bool {
+        matches!(self.state, QBPState::Negotiate)
+    }
+
     /// Returns whether this connection is ready,
     /// which means that the content type and encoding
     /// has been negotiated.
@@ -476,12 +488,19 @@ impl QBP {
         }
     }
 
-    /// Update the connection. Returns a decoded
-    /// message, if any.
+    /// Update the connection. This will instantiate negotiation if
+    /// uninitialized and wait for a negotiated connection. It then
+    /// returns the decoded messages. This method is useful for working
+    /// with tokio::select!.
+    ///
+    /// If you only want to negotiate a connection and send/receive
+    /// data in a synchronous way, see [negotiate], [read] and [send].
+    /// (note that your code will not be cancelation safe, if it
+    /// involves multiple cancelation safe methods).
     ///
     /// # Cancelation Safety
     /// This method is cancelation safe.
-    pub async fn update<T>(&mut self, conn: &mut impl ReadWrite) -> Result<Option<T>>
+    pub async fn update<T>(&mut self, conn: &mut impl ReadWrite) -> Result<T>
     where
         for<'a> T: QBPMessage<'a>,
     {
@@ -499,41 +518,82 @@ impl QBP {
                 headers,
             };
 
-            conn.write_all(&header.serialize()).await?;
             self.state = QBPState::Negotiate;
-            return Ok(None);
+            self.send_packet(conn, &header.serialize()).await?;
         }
 
-        let packet = self.read_packet(conn).await?;
+        loop {
+            let packet = self.read_packet(conn).await?;
 
-        match &self.state {
-            QBPState::Negotiate => {
-                let header = QBPHeaderPacket::deserialize(&packet)?;
-                let content_type = negotiate_content_type(&header.headers)
-                    .ok_or(Error::NegotiationFailed("content-type".into()))?;
-                let content_encoding = negotiate_content_encoding(&header.headers)
-                    .ok_or(Error::NegotiationFailed("content-encoding".into()))?;
-                self.state = QBPState::Messages {
+            match &self.state {
+                QBPState::Negotiate => {
+                    let header = QBPHeaderPacket::deserialize(&packet)?;
+                    let content_type = negotiate_content_type(&header.headers)
+                        .ok_or(Error::NegotiationFailed("content-type".into()))?;
+                    let content_encoding = negotiate_content_encoding(&header.headers)
+                        .ok_or(Error::NegotiationFailed("content-encoding".into()))?;
+                    self.state = QBPState::Messages {
+                        content_type,
+                        content_encoding,
+                    };
+                }
+                QBPState::Messages {
                     content_type,
                     content_encoding,
-                };
-                Ok(None)
+                } => {
+                    let payload = content_encoding.decode(&packet);
+                    let message = content_type.from_bytes::<T>(&payload)?;
+                    return Ok(message);
+                }
+                _ => panic!("unexpected behavior"),
             }
-            QBPState::Messages {
-                content_type,
-                content_encoding,
-            } => {
-                let payload = content_encoding.decode(&packet);
-                let message = content_type.from_bytes::<T>(&payload)?;
-                Ok(Some(message))
-            }
-            _ => panic!("unexpected behavior"),
         }
+    }
+
+    /// Negotiate a connection. This only works on uninitialized connections
+    /// (see [is_uninitialized]). This will send a header packet and then wait
+    /// for a response, which is also a header packet. Those packets are then
+    /// used to negotiate a common content-type and content-encoding.
+    ///
+    /// # Cancelation Safety
+    /// This method is partially cancelation safe, meaning, if you use it
+    /// in tokio::select! and another branch completes first, you may
+    /// not use this method again, as the QBP is now partially initialized,
+    /// and the writer may not be flushed.
+    ///
+    /// Please take a look at [update] instead.
+    pub async fn negotiate(&mut self, conn: &mut impl ReadWrite) -> Result<()> {
+        assert!(self.is_uninitialized());
+
+        let mut headers = HashMap::new();
+        let accept = SUPPORTED_CONTENT_TYPES.keys().join(",");
+        headers.insert("accept".to_owned(), accept);
+        let header = QBPHeaderPacket {
+            major_version: MAJOR_VERSION,
+            minor_version: MINOR_VERSION,
+            headers,
+        };
+
+        self.send_packet(conn, &header.serialize()).await?;
+        self.state = QBPState::Negotiate;
+
+        let packet = self.read_packet(conn).await?;
+        let header = QBPHeaderPacket::deserialize(&packet)?;
+        let content_type = negotiate_content_type(&header.headers)
+            .ok_or(Error::NegotiationFailed("content-type".into()))?;
+        let content_encoding = negotiate_content_encoding(&header.headers)
+            .ok_or(Error::NegotiationFailed("content-encoding".into()))?;
+        self.state = QBPState::Messages {
+            content_type,
+            content_encoding,
+        };
+
+        Ok(())
     }
 }
 
 #[derive(Debug, Default)]
-pub struct QBPWriter {
+struct QBPWriter {
     bytes: Vec<u8>,
     written: usize,
 }
@@ -564,7 +624,7 @@ impl QBPWriter {
 }
 
 #[derive(Debug, Default)]
-pub struct QBPReader {
+struct QBPReader {
     len: Option<usize>,
     bytes: Vec<u8>,
 }
