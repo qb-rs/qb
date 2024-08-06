@@ -766,10 +766,12 @@ name = "qb-daemon"
 version = "0.1.0"
 dependencies = [
  "bitcode",
+ "hex",
  "interprocess",
  "qb-control",
  "qb-core",
  "qb-proto",
+ "rand",
  "thiserror",
  "tokio",
  "tracing",

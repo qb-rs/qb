@@ -4,6 +4,5 @@
 pub mod device;
 pub mod diff;
 pub mod hash;
-pub mod id;
 pub mod ignore;
 pub mod resource;

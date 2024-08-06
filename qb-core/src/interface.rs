@@ -20,7 +20,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     change::QBChange,
-    common::{device::QBDeviceId, hash::QBHash, id::QBId},
+    common::{device::QBDeviceId, hash::QBHash},
 };
 
 /// An identifier for a QBI.
@@ -67,15 +67,6 @@ impl QBIId {
             nonce: u64::from_be_bytes(bytes[8..16].try_into().unwrap()),
         })
     }
-}
-
-/// a bridge message
-#[derive(Encode, Decode, Serialize, Deserialize, Debug, Clone)]
-pub struct QBIBridgeMessage {
-    /// the id of the caller
-    pub caller: QBId,
-    /// the message
-    pub msg: Vec<u8>,
 }
 
 /// A message
@@ -133,21 +124,9 @@ impl From<Message> for QBISlaveMessage {
     }
 }
 
-impl From<QBIBridgeMessage> for QBISlaveMessage {
-    fn from(value: QBIBridgeMessage) -> Self {
-        QBISlaveMessage::Bridge(value)
-    }
-}
-
 impl From<Message> for QBIHostMessage {
     fn from(val: Message) -> Self {
         QBIHostMessage::Message(val)
-    }
-}
-
-impl From<QBIBridgeMessage> for QBIHostMessage {
-    fn from(value: QBIBridgeMessage) -> Self {
-        QBIHostMessage::Bridge(value)
     }
 }
 
@@ -156,8 +135,6 @@ impl From<QBIBridgeMessage> for QBIHostMessage {
 pub enum QBISlaveMessage {
     /// message
     Message(Message),
-    /// allows the QBI to communicate with the application
-    Bridge(QBIBridgeMessage),
 }
 
 /// a message coming from the master
@@ -165,8 +142,6 @@ pub enum QBISlaveMessage {
 pub enum QBIHostMessage {
     /// message
     Message(Message),
-    /// allows the QBI to communicate with the application
-    Bridge(QBIBridgeMessage),
     /// stop the QBI slave
     Stop,
 }

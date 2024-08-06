@@ -74,7 +74,6 @@ impl QBDeviceId {
     }
 }
 
-// TODO: find out why this is here
 /// struct that stores common changes and names for all connections
 #[derive(Encode, Decode, Debug, Clone, Default)]
 pub struct QBDevices {

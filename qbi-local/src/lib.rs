@@ -13,9 +13,7 @@ use qb_core::{
     change::{log::QBChangelog, transaction::QBTransaction, QBChange, QBChangeKind},
     common::device::QBDeviceId,
     fs::{QBFileDiff, QBFS},
-    interface::{
-        Message, QBIBridgeMessage, QBICommunication, QBIContext, QBIHostMessage, QBIId, QBISetup,
-    },
+    interface::{Message, QBICommunication, QBIContext, QBIHostMessage, QBIId, QBISetup},
 };
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info};
@@ -230,13 +228,6 @@ impl Runner {
                 Some(msg) = self.com.rx.recv() => {
                     match msg {
                         QBIHostMessage::Message(msg) => self.on_message(msg).await,
-                        QBIHostMessage::Bridge(QBIBridgeMessage { caller, .. }) =>
-                            self.com
-                                .send(QBIBridgeMessage {
-                                    caller,
-                                    msg: "unimplemented".into(),
-                                })
-                                .await,
                         QBIHostMessage::Stop => break
                     }
                 },
