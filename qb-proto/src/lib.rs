@@ -428,7 +428,7 @@ impl QBP {
     ///
     /// # Cancelation Safety
     /// This method is cancelation safe.
-    pub async fn read_blob(&mut self, read: &mut impl Read) -> Result<Vec<u8>> {
+    pub async fn read_payload(&mut self, read: &mut impl Read) -> Result<Vec<u8>> {
         let packet = self.read_packet(read).await?;
         let (_, content_encoding) = self.get_content()?;
         let payload = content_encoding.decode(&packet);
