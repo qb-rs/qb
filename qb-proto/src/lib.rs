@@ -1,13 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, io::Write};
 
 use bitcode::{Decode, Encode};
-use compression::prelude::*;
+use flate2::{write::ZlibEncoder, Compression};
 use itertools::Itertools;
 use phf::phf_ordered_map;
 use serde::{Deserialize, Serialize};
 use simdutf8::basic::Utf8Error;
 use thiserror::Error;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::trace;
 use url_search_params::{build_url_search_params, parse_url_search_params};
 
@@ -244,53 +243,19 @@ pub enum QBPContentEncoding {
     Zlib,
 }
 
-impl QBPContentEncoding {
-    /// Encode a blob of data using this encoding.
-    pub fn encode(&self, data: &[u8]) -> Vec<u8> {
-        return data.into();
-        trace!("decode: encoding data: {}", data.len());
+impl QBPContentEncoding {}
+
+pub enum QBPContentEncoder {
+    Zlib(ZlibEncoder<Box<dyn std::io::Write>>),
+}
+
+impl QBPContentEncoder {
+    pub fn feed(&mut self, chunk: &[u8]) {
         match self {
-            QBPContentEncoding::BZip2 => Self::_encode(data, BZip2Encoder::new(9)),
-            QBPContentEncoding::GZip => Self::_encode(data, GZipEncoder::new()),
-            QBPContentEncoding::Zlib => Self::_encode(data, ZlibEncoder::new()),
+            QBPContentEncoder::Zlib(encoder) => {
+                encoder.write_all(chunk);
+            }
         }
-    }
-
-    #[inline(always)]
-    fn _encode<E: Encoder<In = u8, Out = u8>>(data: &[u8], mut encoder: E) -> Vec<u8>
-    where
-        CompressionError: From<E::Error>,
-        E::Error: std::fmt::Debug,
-    {
-        data.into_iter()
-            .cloned()
-            .encode(&mut encoder, Action::Finish)
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .unwrap()
-    }
-
-    /// Decode a blob of data using this encoding.
-    pub fn decode(&self, data: &[u8]) -> Vec<u8> {
-        return data.into();
-        trace!("decode: decoding data: {}", data.len());
-        match self {
-            QBPContentEncoding::BZip2 => Self::_decode(data, BZip2Decoder::new()),
-            QBPContentEncoding::GZip => Self::_decode(data, GZipDecoder::new()),
-            QBPContentEncoding::Zlib => Self::_decode(data, ZlibDecoder::new()),
-        }
-    }
-
-    #[inline(always)]
-    fn _decode<D: Decoder<Input = u8, Output = u8>>(data: &[u8], mut decoder: D) -> Vec<u8>
-    where
-        CompressionError: From<D::Error>,
-        D::Error: std::fmt::Debug,
-    {
-        data.into_iter()
-            .cloned()
-            .decode(&mut decoder)
-            .collect::<std::result::Result<Vec<_>, _>>()
-            .unwrap()
     }
 }
 
@@ -389,14 +354,14 @@ pub struct QBP {
     writer: QBPWriter,
 }
 
-pub trait Read: AsyncReadExt + Unpin {}
-impl<T> Read for T where T: AsyncReadExt + Unpin {}
+pub trait Read: tokio::io::AsyncReadExt + Unpin {}
+impl<T> Read for T where T: tokio::io::AsyncReadExt + Unpin {}
 
-pub trait Write: AsyncWriteExt + Unpin {}
-impl<T> Write for T where T: AsyncWriteExt + Unpin {}
+pub trait Write: tokio::io::AsyncWriteExt + Unpin {}
+impl<T> Write for T where T: tokio::io::AsyncWriteExt + Unpin {}
 
-pub trait ReadWrite: AsyncReadExt + AsyncWriteExt + Unpin {}
-impl<T> ReadWrite for T where T: AsyncReadExt + AsyncWriteExt + Unpin {}
+pub trait ReadWrite: tokio::io::AsyncReadExt + tokio::io::AsyncWriteExt + Unpin {}
+impl<T> ReadWrite for T where T: tokio::io::AsyncReadExt + tokio::io::AsyncWriteExt + Unpin {}
 
 impl QBP {
     /// Returns whether this connection is unitialized,
