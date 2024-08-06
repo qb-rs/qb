@@ -14,3 +14,4 @@ thiserror = "1.0.63"
 qb-core = { path = "../qb-core" }
 qb-proto = { path = "../qb-proto" }
 qb-control = { path = "../qb-control" }
+futures = "0.3.30"
