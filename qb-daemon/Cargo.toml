@@ -10,6 +10,7 @@ interprocess = { version = "2.2.0", features = ["tokio"] }
 tracing-subscriber = "0.3.18"
 tracing-panic = "0.1.2"
 tracing = "0.1.40"
+thiserror = "1.0.63"
 qb-core = { path = "../qb-core" }
 qb-proto = { path = "../qb-proto" }
 qb-control = { path = "../qb-control" }

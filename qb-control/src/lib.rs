@@ -55,8 +55,9 @@ impl fmt::Display for QBControlRequest {
 
 #[derive(Encode, Decode, Serialize, Deserialize)]
 pub enum QBControlResponse {
-    // TODO: attach/detach success/error
     Bridge { msg: Vec<u8> },
+    Error { msg: String },
+    Success,
 }
 
 impl fmt::Display for QBControlResponse {
@@ -68,6 +69,12 @@ impl fmt::Display for QBControlResponse {
                     "MSG_CONTROL_RESP_BRIDGE: {}",
                     simdutf8::basic::from_utf8(msg).unwrap_or("binary data")
                 )
+            }
+            QBControlResponse::Error { msg } => {
+                write!(f, "MSG_CONTROL_RESP_ERROR: {}", msg)
+            }
+            QBControlResponse::Success => {
+                write!(f, "MSG_CONTROL_RESP_SUCCESS")
             }
         }
     }

@@ -770,6 +770,7 @@ dependencies = [
  "qb-control",
  "qb-core",
  "qb-proto",
+ "thiserror",
  "tokio",
  "tracing",
  "tracing-panic",

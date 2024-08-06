@@ -1,7 +1,6 @@
-use std::{collections::HashMap, io::Write};
+use std::collections::HashMap;
 
 use bitcode::{Decode, Encode};
-use flate2::{write::ZlibEncoder, Compression};
 use itertools::Itertools;
 use phf::phf_ordered_map;
 use serde::{Deserialize, Serialize};
@@ -98,9 +97,9 @@ pub const SUPPORTED_CONTENT_TYPES: phf::OrderedMap<&'static str, QBPContentType>
 };
 
 pub const SUPPORTED_CONTENT_ENCODINGS: phf::OrderedMap<&'static str, QBPContentEncoding> = phf_ordered_map! {
-    "bzip2" => QBPContentEncoding::BZip2,
-    "gzip" => QBPContentEncoding::GZip,
     "zlib" => QBPContentEncoding::Zlib,
+    "gzip" => QBPContentEncoding::Gzip,
+    "plain" => QBPContentEncoding::Plain,
 };
 
 impl QBPHeaderPacket {
@@ -238,22 +237,78 @@ pub fn negotiate_content_encoding(headers: &HashMap<String, String>) -> Option<Q
 
 #[derive(Debug, Clone)]
 pub enum QBPContentEncoding {
-    BZip2,
-    GZip,
+    /// Use zlib to (de)compress payloads.
     Zlib,
+    /// Use gzip to (de)compress payloads.
+    Gzip,
+    /// Do not (de)compress payloads.
+    Plain,
 }
 
-impl QBPContentEncoding {}
+// This is in a seperate module, as it uses the
+// synchronous Write trait from std::io, which conflicts
+// the asynchronous write traits from tokio.
+mod encodeimpl {
+    use super::QBPContentEncoding;
+    use flate2::{
+        write::{GzDecoder, GzEncoder, ZlibDecoder, ZlibEncoder},
+        Compression,
+    };
+    use std::io::Write;
+    use tracing::trace;
 
-pub enum QBPContentEncoder {
-    Zlib(ZlibEncoder<Box<dyn std::io::Write>>),
-}
+    impl QBPContentEncoding {
+        /// Encode data with this encoding.
+        pub fn encode(&self, data: &[u8]) -> Vec<u8> {
+            match self {
+                &QBPContentEncoding::Zlib => {
+                    trace!("encode: encoding data with zlib: {}", data.len());
 
-impl QBPContentEncoder {
-    pub fn feed(&mut self, chunk: &[u8]) {
-        match self {
-            QBPContentEncoder::Zlib(encoder) => {
-                encoder.write_all(chunk);
+                    let mut encoder = ZlibEncoder::new(Vec::new(), Compression::best());
+                    encoder.write_all(data).unwrap();
+                    let res = encoder.finish().unwrap();
+
+                    trace!("encode: result: {}", res.len());
+
+                    res
+                }
+                &QBPContentEncoding::Gzip => {
+                    trace!("encode: encoding data with gzip: {}", data.len());
+
+                    let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
+                    encoder.write_all(data).unwrap();
+                    let res = encoder.finish().unwrap();
+
+                    trace!("encode: result: {}", res.len());
+
+                    res
+                }
+                &QBPContentEncoding::Plain => {
+                    trace!("encode: skip compression");
+
+                    data.into()
+                }
+            }
+        }
+
+        /// Decode encoded data.
+        pub fn decode(&self, data: &[u8]) -> Vec<u8> {
+            match self {
+                &QBPContentEncoding::Zlib => {
+                    let mut decoder = ZlibDecoder::new(Vec::new());
+                    decoder.write_all(data).unwrap();
+                    decoder.finish().unwrap()
+                }
+                &QBPContentEncoding::Gzip => {
+                    let mut decoder = GzDecoder::new(Vec::new());
+                    decoder.write_all(data).unwrap();
+                    decoder.finish().unwrap()
+                }
+                &QBPContentEncoding::Plain => {
+                    trace!("encode: skip decompression");
+
+                    data.into()
+                }
             }
         }
     }

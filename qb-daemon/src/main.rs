@@ -1,5 +1,5 @@
 use core::panic;
-use std::{collections::HashMap, fs::File, sync::Arc};
+use std::{collections::HashMap, fs::File, sync::Arc, time::Duration};
 
 use bitcode::DecodeOwned;
 use interprocess::local_socket::{
@@ -13,10 +13,25 @@ use qb_core::{
     QB,
 };
 use qb_proto::{QBPBlob, QBP};
+use thiserror::Error;
 use tokio::sync::mpsc;
 use tracing::{span, trace, warn, Instrument, Level};
 use tracing_panic::panic_hook;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
+
+#[derive(Error, Debug)]
+pub enum Error {
+    #[error("protocol error: {0}")]
+    Protocol(#[from] qb_proto::Error),
+    #[error("error while joining to QBI task")]
+    JoinError(#[from] tokio::task::JoinError),
+    #[error("a QBI with the given id could not be found")]
+    NotFound,
+    #[error("this type of QBI is not supported")]
+    NotSupported,
+}
+
+pub type Result<T> = std::result::Result<T, Error>;
 
 // TODO: asyncify these
 pub type StartFn = Box<dyn Fn(&mut QB, QBIId, &[u8])>;
@@ -27,34 +42,63 @@ pub struct QBIDescriptior {
     data: Vec<u8>,
 }
 
+pub struct Handle {
+    tx: mpsc::Sender<QBControlResponse>,
+}
+
+impl Handle {
+    /// Send a message to this handle
+    pub async fn send(&self, msg: impl Into<QBControlResponse>) {
+        self.tx.send(msg.into()).await.unwrap();
+    }
+}
+
+pub struct HandleInit {
+    id: QBId,
+    conn: Stream,
+    tx: mpsc::Sender<(QBId, QBControlRequest, Option<QBPBlob>)>,
+    rx: mpsc::Receiver<QBControlResponse>,
+}
+
 pub struct QBDaemon {
     qb: QB,
     qbis: HashMap<QBIId, QBIDescriptior>,
     start_fns: HashMap<String, StartFn>,
     setup_fns: HashMap<String, SetupFn>,
+
+    req_tx: mpsc::Sender<(QBId, QBControlRequest, Option<QBPBlob>)>,
+    req_rx: mpsc::Receiver<(QBId, QBControlRequest, Option<QBPBlob>)>,
+    handles: HashMap<QBId, Handle>,
 }
 
 impl QBDaemon {
     /// Build the daemon
     pub fn init(qb: QB) -> Self {
+        let (req_tx, req_rx) = mpsc::channel(10);
         Self {
             qb,
             qbis: Default::default(),
             start_fns: Default::default(),
             setup_fns: Default::default(),
+            handles: Default::default(),
+            req_tx,
+            req_rx,
         }
     }
 
     /// Start a QBI by the given id.
-    pub fn start(&mut self, id: QBIId) {
-        let descriptor = self.qbis.get(&id).unwrap();
-        let start = self.start_fns.get(&descriptor.name).unwrap();
+    pub fn start(&mut self, id: QBIId) -> Result<()> {
+        let descriptor = self.qbis.get(&id).ok_or(Error::NotFound)?;
+        let name = &descriptor.name;
+        let start = self.start_fns.get(name).ok_or(Error::NotSupported)?;
         start(&mut self.qb, id, &descriptor.data);
+        Ok(())
     }
 
     /// Stop a QBI by the given id.
-    pub async fn stop(&mut self, id: QBIId) {
-        self.qb.detach(&id).await;
+    pub async fn stop(&mut self, id: QBIId) -> Result<()> {
+        self.qb.detach(&id).await.ok_or(Error::NotFound)?.await?;
+        Ok(())
     }
 
     pub fn setup(&mut self, name: String, blob: QBPBlob) {
@@ -93,9 +137,26 @@ impl QBDaemon {
     }
 
     pub async fn process(&mut self, caller: QBId, msg: QBControlRequest, blob: Option<QBPBlob>) {
+        let resp = self._process(caller.clone(), msg, blob).await;
+        let handle = self.handles.get(&caller).unwrap();
+        match resp {
+            Ok(_) => handle.send(QBControlResponse::Success),
+            Err(err) => handle.send(QBControlResponse::Error {
+                msg: format!("{:?}", err),
+            }),
+        }
+        .await;
+    }
+
+    async fn _process(
+        &mut self,
+        caller: QBId,
+        msg: QBControlRequest,
+        blob: Option<QBPBlob>,
+    ) -> Result<()> {
         match msg {
-            QBControlRequest::Start { id } => self.start(id),
-            QBControlRequest::Stop { id } => self.stop(id).await,
+            QBControlRequest::Start { id } => self.start(id)?,
+            QBControlRequest::Stop { id } => self.stop(id).await?,
             QBControlRequest::Setup { name, .. } => {
                 let blob = blob.unwrap();
                 self.setup(name, blob);
@@ -103,7 +164,24 @@ impl QBDaemon {
             QBControlRequest::Bridge { id, msg } => {
                 self.qb.send(&id, QBIBridgeMessage { caller, msg }).await;
             }
-        }
+        };
+
+        Ok(())
+    }
+
+    pub async fn init_handle(&mut self, conn: Stream) {
+        let id = QBId::generate();
+        let (resp_tx, resp_rx) = mpsc::channel::<QBControlResponse>(10);
+        self.handles.insert(id.clone(), Handle { tx: resp_tx });
+
+        let init = HandleInit {
+            tx: self.req_tx.clone(),
+            rx: resp_rx,
+            conn,
+            id,
+        };
+
+        tokio::spawn(handle_run(init));
     }
 
     /// Register the default QBI kinds.
@@ -111,17 +189,6 @@ impl QBDaemon {
         self.register::<QBILocal>("local");
         // self.register::<QBIGDrive>("gdrive");
     }
-}
-
-struct Handle {
-    tx: tokio::sync::mpsc::Sender<QBControlResponse>,
-}
-
-struct HandleInit {
-    id: QBId,
-    conn: Stream,
-    tx: mpsc::Sender<(QBId, QBControlRequest, Option<QBPBlob>)>,
-    rx: mpsc::Receiver<QBControlResponse>,
 }
 
 #[tokio::main]
@@ -157,58 +224,42 @@ async fn main() {
     let qb = QB::init("./local").await;
     let mut daemon = QBDaemon::init(qb);
 
-    let (req_tx, mut req_rx) =
-        tokio::sync::mpsc::channel::<(QBId, QBControlRequest, Option<QBPBlob>)>(10);
-    let mut handles: HashMap<QBId, Handle> = HashMap::new();
-
     // Process
     loop {
         tokio::select! {
             // process qbi
             _ =  daemon.qb.process_handles() => {
                 if let Some(response) = daemon.qb.poll_bridge_recv() {
-                    handles.get(&response.caller)
+                    daemon.handles.get(&response.caller)
                         .unwrap()
-                        .tx
                         .send(QBControlResponse::Bridge {
                             msg: response.msg
                         })
-                        .await
-                        .unwrap();
+                        .await;
                 }
             },
-            Some((caller, msg, blob)) = req_rx.recv() => {
+            Some((caller, msg, blob)) = daemon.req_rx.recv() => {
                 daemon.process(caller, msg, blob).await;
             }
             Ok(conn) = socket.accept() => {
-                let id = QBId::generate();
-                let (resp_tx, resp_rx) = tokio::sync::mpsc::channel::<QBControlResponse>(10);
-                handles.insert(id.clone(), Handle {
-                    tx: resp_tx,
-                });
-
-                let init = HandleInit {
-                    tx: req_tx.clone(),
-                    rx: resp_rx,
-                    conn,
-                    id,
-                };
-
-                tokio::spawn(async move {
-                    let span = span!(Level::TRACE, "handle", id = init.id.to_hex());
-                    match handle_run(init).await {
-                        Err(err) => span.in_scope(|| {
-                            warn!("handle finished with error: {:?}", err)
-                        }),
-                        Ok(_) => {}
-                    }
-                });
+                daemon.init_handle(conn).await;
             }
         }
     }
 }
 
-async fn handle_run(mut init: HandleInit) -> qb_proto::Result<()> {
+async fn handle_run(mut init: HandleInit) {
+    let span = span!(Level::TRACE, "handle", id = init.id.to_hex());
+
+    match _handle_run(&mut init).await {
+        Err(err) => span.in_scope(|| warn!("handle finished with error: {:?}", err)),
+        Ok(_) => {}
+    }
+
+    tokio::time::sleep(Duration::from_secs(1)).await;
+}
+
+async fn _handle_run(init: &mut HandleInit) -> Result<()> {
     let span = span!(Level::TRACE, "handle", id = init.id.to_hex());
 
     span.in_scope(|| {
@@ -238,7 +289,7 @@ async fn handle_run(mut init: HandleInit) -> qb_proto::Result<()> {
                         };
                         init.tx.send((init.id.clone(), msg, blob)).instrument(span.clone()).await.unwrap();
                     }
-                    Err(err) => return Err(err),
+                    Err(err) => return Err(err.into()),
                 }
 
             }
