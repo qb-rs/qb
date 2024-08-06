@@ -364,8 +364,9 @@ impl Default for QBPState {
 
 #[derive(Debug, Default)]
 pub struct QBP {
-    pub state: QBPState,
-    pub reader: QBPReader,
+    state: QBPState,
+    reader: QBPReader,
+    writer: QBPWriter,
 }
 
 pub trait Read: AsyncReadExt + Unpin {}
@@ -387,41 +388,51 @@ impl QBP {
 
     /// Send a packet through this protocol.
     ///
+    /// You probably don't want to use this method, as-is,
+    /// as content-type and content-encoding play no role here.
+    ///
+    /// To send a binary payload after content-encoding has been
+    /// negotiated see [send_payload].
+    ///
     /// # Cancelation Safety
-    /// This method is not cancel safe. It should always be awaited.
+    /// This method is cancelation safe.
     pub async fn send_packet(&mut self, write: &mut impl Write, packet: &[u8]) -> Result<()> {
-        let len_bytes = (packet.len() as u64).to_be_bytes();
-        write.write_all(&len_bytes).await?;
-        write.write_all(&packet).await?;
-        Ok(())
+        self.writer.write(write, packet).await
     }
 
-    /// Send a blob through this protocol.
+    /// Read a message from this protocol.
     ///
-    /// This should be pre-anounced, as if not,
-    /// the blob might be mistaken for a regular message.
+    /// You probably don't want to use this method, as-is,
+    /// as content-type and content-encoding play no role here.
+    ///
+    /// To read a binary payload after content-encoding has been
+    /// negotiated see [read_payload].
+    ///
+    /// # Cancelation Safety
+    /// This method is cancelation safe.
+    pub async fn read_packet(&mut self, read: &mut impl Read) -> Result<Vec<u8>> {
+        self.reader.read(read).await
+    }
+
+    /// Send a binary payload through this protocol.
     ///
     /// # Cancelation Safety
     /// This method is not cancel safe. It should always be awaited.
-    pub async fn send_blob(&mut self, write: &mut impl Write, blob: QBPBlob) -> Result<()> {
-        self.send_packet(write, blob.content_type.as_bytes())
-            .await?;
-        self.send_packet(write, &blob.content).await?;
-        Ok(())
+    pub async fn send_payload(&mut self, write: &mut impl Write, payload: &[u8]) -> Result<()> {
+        let (_, content_encoding) = self.get_content()?;
+        let packet = content_encoding.encode(&payload);
+        self.send_packet(write, &packet).await
     }
 
-    /// Read a blob through this protocol.
+    /// Read a binary payload through this protocol.
     ///
-    /// This should be pre-anounced, as if not,
-    /// we might mistake a regular message as a blob.
-    pub async fn read_blob(&mut self, read: &mut impl Read) -> Result<QBPBlob> {
-        let content_type = simdutf8::basic::from_utf8(&self.reader.read(read).await?)?.into();
-        let content = self.reader.read(read).await?;
-
-        Ok(QBPBlob {
-            content_type,
-            content,
-        })
+    /// # Cancelation Safety
+    /// This method is cancelation safe.
+    pub async fn read_blob(&mut self, read: &mut impl Read) -> Result<Vec<u8>> {
+        let packet = self.read_packet(read).await?;
+        let (_, content_encoding) = self.get_content()?;
+        let payload = content_encoding.decode(&packet);
+        Ok(payload)
     }
 
     /// Send a message through this protocol.
@@ -432,15 +443,35 @@ impl QBP {
     where
         for<'a> T: QBPMessage<'a>,
     {
+        let (content_type, content_encoding) = self.get_content()?;
+        let payload = content_type.to_bytes(msg)?;
+        let packet = content_encoding.encode(&payload);
+        self.send_packet(write, &packet).await
+    }
+
+    /// Read a message from this protocol.
+    ///
+    /// # Cancelation Safety
+    /// This method is cancelation safe.
+    pub async fn read<T>(&mut self, read: &mut impl Read) -> Result<T>
+    where
+        for<'a> T: QBPMessage<'a>,
+    {
+        let packet = self.read_packet(read).await?;
+        let (content_type, content_encoding) = self.get_content()?;
+        let payload = content_encoding.decode(&packet);
+        let message = content_type.from_bytes::<T>(&payload)?;
+        Ok(message)
+    }
+
+    /// Try to get content-type and content-encoding of this
+    /// protocol. Returns an error if not negotiated yet.
+    fn get_content(&self) -> Result<(&QBPContentType, &QBPContentEncoding)> {
         match &self.state {
             QBPState::Messages {
                 content_type,
                 content_encoding,
-            } => {
-                let payload = content_type.to_bytes(msg)?;
-                let packet = content_encoding.encode(&payload);
-                self.send_packet(write, &packet).await
-            }
+            } => Ok((content_type, content_encoding)),
             _ => Err(Error::NotReady),
         }
     }
@@ -454,6 +485,9 @@ impl QBP {
     where
         for<'a> T: QBPMessage<'a>,
     {
+        // flush the writer
+        self.writer.flush(conn).await?;
+
         // send header packet
         if let QBPState::Initial = self.state {
             let mut headers = HashMap::new();
@@ -465,11 +499,12 @@ impl QBP {
                 headers,
             };
 
-            conn.write(&header.serialize()).await?;
+            conn.write_all(&header.serialize()).await?;
+            self.state = QBPState::Negotiate;
             return Ok(None);
         }
 
-        let packet = self.reader.read(conn).await?;
+        let packet = self.read_packet(conn).await?;
 
         match &self.state {
             QBPState::Negotiate => {
@@ -494,6 +529,37 @@ impl QBP {
             }
             _ => panic!("unexpected behavior"),
         }
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct QBPWriter {
+    bytes: Vec<u8>,
+    written: usize,
+}
+
+impl QBPWriter {
+    /// Write a packet.
+    ///
+    /// # Cancelation Safety
+    /// This method is cancelation safe.
+    pub async fn write(&mut self, write: &mut impl Write, packet: &[u8]) -> Result<()> {
+        let len_bytes = (packet.len() as u64).to_be_bytes();
+        self.bytes.extend_from_slice(&len_bytes);
+        self.bytes.extend_from_slice(&packet);
+        self.flush(write).await
+    }
+
+    /// Flush this writer.
+    ///
+    /// # Cancelation Safety
+    /// This method is cancelation safe.
+    pub async fn flush(&mut self, write: &mut impl Write) -> Result<()> {
+        while self.bytes.len() - self.written > 0 {
+            self.written += write.write(&self.bytes[self.written..]).await?;
+        }
+        self.bytes.clear();
+        Ok(())
     }
 }
 
