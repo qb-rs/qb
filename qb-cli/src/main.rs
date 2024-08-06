@@ -28,6 +28,7 @@ enum Commands {
         name: String,
         #[arg(long = "type", default_value = "application/json")]
         content_type: String,
+        content: Option<String>,
     },
     Start {
         /// the id of the QBI in hex format
@@ -100,9 +101,19 @@ async fn main() {
 
             println!("res: {}", res);
         }
-        Commands::Setup { name, content_type } => {
-            let mut content = Vec::new();
-            tokio::io::stdin().read_to_end(&mut content).await.unwrap();
+        Commands::Setup {
+            name,
+            content_type,
+            content,
+        } => {
+            let content = match content {
+                Some(content) => content.into_bytes(),
+                None => {
+                    let mut buf = Vec::new();
+                    tokio::io::stdin().read_to_end(&mut buf).await.unwrap();
+                    buf
+                }
+            };
             let req = QBControlRequest::Setup { content_type, name };
 
             let mut conn = connect().await;
@@ -114,7 +125,7 @@ async fn main() {
             let resp = protocol.read::<QBControlResponse>(&mut conn).await.unwrap();
             match resp {
                 QBControlResponse::Success => {}
-                v => panic!("unexpected response: {}", v),
+                v => eprintln!("unexpected response: {}", v),
             }
         }
         Commands::Start { id } => {
@@ -127,7 +138,7 @@ async fn main() {
             let resp = protocol.read::<QBControlResponse>(&mut conn).await.unwrap();
             match resp {
                 QBControlResponse::Success => {}
-                v => panic!("unexpected response: {}", v),
+                v => eprintln!("unexpected response: {}", v),
             }
         }
         Commands::Stop { id } => {
@@ -139,7 +150,7 @@ async fn main() {
             let resp = protocol.read::<QBControlResponse>(&mut conn).await.unwrap();
             match resp {
                 QBControlResponse::Success => {}
-                v => panic!("unexpected response: {}", v),
+                v => eprintln!("unexpected response: {}", v),
             }
         }
         Commands::List => {
@@ -161,7 +172,7 @@ async fn main() {
                         println!();
                     }
                 }
-                v => panic!("unexpected response: {}", v),
+                v => eprintln!("unexpected response: {}", v),
             }
         }
     };
