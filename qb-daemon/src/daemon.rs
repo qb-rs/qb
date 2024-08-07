@@ -59,7 +59,7 @@ pub type QBIStartFn = Box<
 >;
 /// Function pointer to a function which sets up an interface.
 pub type QBISetupFn =
-    Box<dyn Fn(QBPBlob) -> Pin<Box<dyn Future<Output = Result<(QBIId, Vec<u8>)>> + 'static>>>;
+    Box<dyn Fn(QBPBlob) -> Pin<Box<dyn Future<Output = Result<Vec<u8>>> + 'static>>>;
 
 /// A handle to a task processing a QBP stream for controlling the daemon.
 pub struct QBCHandle {
@@ -191,7 +191,8 @@ impl QBDaemon {
     /// Setup an interface.
     pub async fn setup(&mut self, name: String, blob: QBPBlob) -> Result<()> {
         let setup = self.setup_fns.get(&name).ok_or(Error::NotSupported)?;
-        let (id, data) = setup(blob).await?;
+        let data = setup(blob).await?;
+        let id = QBIId::generate();
         self.config
             .qbi_table
             .insert(id.clone(), QBIDescriptior { name, data });
@@ -236,8 +237,8 @@ impl QBDaemon {
                 Box::pin(async move {
                     let cx = blob.deserialize::<T>()?;
                     let data = bitcode::encode(&cx);
-                    let id = cx.setup().await;
-                    Ok((id, data))
+                    cx.setup().await;
+                    Ok(data)
                 })
             }),
         );
@@ -298,18 +299,14 @@ impl QBDaemon {
 async fn handle_run(mut init: HandleInit) {
     let span = trace_span!("handle", id = init.id.to_hex());
 
-    match _handle_run(&mut init).await {
+    match _handle_run(&mut init).instrument(span.clone()).await {
         Err(err) => span.in_scope(|| warn!("handle finished with error: {:?}", err)),
         Ok(_) => {}
     }
 }
 
 async fn _handle_run(init: &mut HandleInit) -> Result<()> {
-    let span = trace_span!("handle", id = init.id.to_hex());
-
-    span.in_scope(|| {
-        trace!("create new handle with id={} conn={:?}", init.id, init.conn);
-    });
+    trace!("create new handle with id={} conn={:?}", init.id, init.conn);
 
     let mut protocol = QBP::default();
 
@@ -317,15 +314,13 @@ async fn _handle_run(init: &mut HandleInit) -> Result<()> {
         tokio::select! {
             Some(response) = init.rx.recv() => {
                 // write a message to the socket
-                span.in_scope(|| {
-                    trace!("send {}", response);
-                });
-                protocol.send(&mut init.conn, response).instrument(span.clone()).await?;
+                trace!("send {}", response);
+                protocol.send(&mut init.conn, response).await?;
             }
-            res = protocol.update::<QBCRequest>(&mut init.conn).instrument(span.clone()) => {
+            res = protocol.update::<QBCRequest>(&mut init.conn) => {
                 match res {
                     Ok(msg) => {
-                        init.tx.send((init.id.clone(), msg)).instrument(span.clone()).await.unwrap();
+                        init.tx.send((init.id.clone(), msg)).await.unwrap();
                     }
                     Err(err) => return Err(err.into()),
                 }

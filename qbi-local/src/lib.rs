@@ -13,7 +13,7 @@ use qb_core::{
     change::{log::QBChangelog, transaction::QBTransaction, QBChange, QBChangeKind},
     common::device::QBDeviceId,
     fs::{QBFileDiff, QBFS},
-    interface::{Message, QBICommunication, QBIContext, QBIHostMessage, QBIId, QBISetup},
+    interface::{Message, QBICommunication, QBIContext, QBIHostMessage, QBISetup},
 };
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
@@ -25,13 +25,15 @@ pub struct QBILocal {
 
 impl QBIContext for QBILocal {
     async fn run(self, host_id: QBDeviceId, com: QBICommunication) {
-        Runner::init(self, host_id, com).await.run_async().await;
+        Runner::init(self, host_id, com).await.run().await;
     }
 }
 
 impl<'a> QBISetup<'a> for QBILocal {
-    async fn setup(self) -> QBIId {
-        QBIId::generate()
+    async fn setup(self) {
+        let mut fs = QBFS::init(self.path).await;
+        fs.devices.host_id = QBDeviceId::generate();
+        fs.save().await.unwrap();
     }
 }
 
@@ -210,7 +212,7 @@ impl Runner {
             .await;
     }
 
-    async fn run_async(mut self) {
+    async fn run(mut self) {
         let (tx, mut rx) = tokio::sync::mpsc::channel(10);
 
         let mut watcher = notify::recommended_watcher(move |res: Result<Event, _>| {

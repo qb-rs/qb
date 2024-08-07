@@ -3,7 +3,7 @@
 use bitcode::{Decode, Encode};
 use qb_core::{
     common::QBDeviceId,
-    interface::{Message, QBICommunication, QBIContext, QBIId, QBISetup, QBISlaveMessage},
+    interface::{Message, QBICommunication, QBIContext, QBISetup, QBISlaveMessage},
 };
 use qb_proto::QBP;
 use serde::{Deserialize, Serialize};
@@ -37,7 +37,7 @@ impl QBIContext for QBIClientSocket {
         info!("connected to socket: {:?}", stream);
 
         let runner = Runner {
-            _host_id: host_id,
+            host_id,
             com,
             stream,
             protocol,
@@ -48,9 +48,9 @@ impl QBIContext for QBIClientSocket {
 }
 
 impl<'a> QBISetup<'a> for QBIClientSocket {
-    async fn setup(self) -> QBIId {
+    async fn setup(self) {
         // TODO: add initialization message
-        todo!()
+        //todo!()
     }
 }
 
@@ -74,7 +74,7 @@ impl QBIContext for QBISocket {
         }
 
         let runner = Runner {
-            _host_id: host_id,
+            host_id,
             com,
             stream,
             protocol,
@@ -85,7 +85,7 @@ impl QBIContext for QBISocket {
 }
 
 struct Runner {
-    _host_id: QBDeviceId,
+    host_id: QBDeviceId,
     com: QBICommunication,
     stream: TcpStream,
     protocol: QBP,
@@ -93,13 +93,27 @@ struct Runner {
 
 impl Runner {
     async fn run(mut self) {
+        // initialize
+        self.protocol
+            .send(
+                &mut self.stream,
+                Message::Device {
+                    device_id: self.host_id,
+                },
+            )
+            .await
+            .unwrap();
+
+        // proxy messages
         loop {
-            let msg = self
-                .protocol
-                .read::<Message>(&mut self.stream)
-                .await
-                .unwrap();
-            self.com.send(QBISlaveMessage::Message(msg)).await;
+            tokio::select! {
+                Ok(msg) = self.protocol.read::<Message>(&mut self.stream) => {
+                    self.com.send(QBISlaveMessage::Message(msg)).await;
+                },
+                msg = self.com.read() => {
+                    self.protocol.send(&mut self.stream, msg).await.unwrap();
+                }
+            }
         }
     }
 }

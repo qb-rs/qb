@@ -168,7 +168,7 @@ pub trait QBIContext: Send + Sync {
 /// TODO: doc
 pub trait QBISetup<'a>: Encode + Decode<'a> + Serialize + Deserialize<'a> {
     /// Setup this kind of QBI.
-    fn setup(self) -> impl Future<Output = QBIId> + Send;
+    fn setup(self) -> impl Future<Output = ()> + Send;
 }
 
 /// struct describing the communication interface between QBI and master
@@ -186,7 +186,7 @@ impl QBICommunication {
     }
 
     /// TODO: doc
-    pub fn blocking_send(&self, msg: impl Into<QBISlaveMessage>) {
-        self.tx.blocking_send(msg.into()).unwrap()
+    pub async fn read(&mut self) -> QBIHostMessage {
+        self.rx.recv().await.expect("channel closed")
     }
 }
