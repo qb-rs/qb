@@ -121,6 +121,9 @@ async fn main() {
             None => {
                 tokio::select! {
                     v = daemon.master.read() => daemon.master.process(v).await,
+                    Ok(stream) = listener.accept() => {
+                        info!("received connection: {:?}", stream);
+                    }
                 }
             }
         }

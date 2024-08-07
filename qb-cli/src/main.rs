@@ -1,6 +1,6 @@
 use std::{fs::File, sync::Arc};
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Parser, Subcommand};
 use interprocess::local_socket::{traits::tokio::Stream, GenericNamespaced, ToNsName};
 use qb_control::{QBCRequest, QBCResponse};
 use qb_core::interface::QBIId;
@@ -42,12 +42,6 @@ enum Commands {
         #[arg(long="id", value_parser=parse_id)]
         id: QBIId,
     },
-}
-
-#[derive(Clone, ValueEnum)]
-enum Kind {
-    /// qbi-local
-    Local,
 }
 
 fn parse_id(s: &str) -> Result<QBIId, String> {

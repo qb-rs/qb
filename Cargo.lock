@@ -1021,6 +1021,7 @@ dependencies = [
  "qb-proto",
  "rustls",
  "serde",
+ "serde_bytes",
  "tokio",
  "tracing",
 ]

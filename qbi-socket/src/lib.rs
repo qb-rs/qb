@@ -17,6 +17,7 @@ pub struct QBIClientSocket {
     pub addr: String,
 
     /// An authentication token sent on boot
+    #[serde(with = "serde_bytes")]
     pub auth: Vec<u8>,
 }
 
