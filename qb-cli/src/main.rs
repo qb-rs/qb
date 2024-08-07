@@ -33,7 +33,7 @@ enum Commands {
         content_type: String,
         content: Option<String>,
     },
-    #[command(alias = "rm")]
+    #[command(name = "rm")]
     /// Remove an interface
     Remove {
         /// the id of the interface in hex format
