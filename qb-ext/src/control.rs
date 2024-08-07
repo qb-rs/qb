@@ -51,12 +51,17 @@ impl QBCId {
 /// A request comming from a controlling task.
 #[derive(Encode, Decode, Serialize, Deserialize)]
 pub enum QBCRequest {
-    /// Setup a new interface.
-    Setup {
+    /// Add a new interface.
+    Add {
         /// The name of the interface kind ("gdrive", "local", ...)
         name: String,
         /// The setup blob
         blob: QBPBlob,
+    },
+    /// Remove an interface
+    Remove {
+        /// the identifier
+        id: QBIId,
     },
     /// Start an existing interface.
     Start {
@@ -75,23 +80,26 @@ pub enum QBCRequest {
 impl fmt::Display for QBCRequest {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            QBCRequest::Setup { name, blob } => {
+            QBCRequest::Add { name, blob } => {
                 write!(
                     f,
-                    "MSG_CONTROL_REQ_SETUP {} {} {}",
+                    "QBC_MSG_REQ_ADD {} {} {}",
                     name,
                     blob.content_type,
                     simdutf8::basic::from_utf8(&blob.content).unwrap_or("binary data")
                 )
             }
+            QBCRequest::Remove { id } => {
+                write!(f, "QBC_MSG_REQ_REMOVE {}", id)
+            }
             QBCRequest::Start { id } => {
-                write!(f, "MSG_CONTROL_REQ_START {}", id)
+                write!(f, "QBC_MSG_REQ_START {}", id)
             }
             QBCRequest::Stop { id } => {
-                write!(f, "MSG_CONTROL_REQ_STOP {}", id)
+                write!(f, "QBC_MSG_REQ_STOP {}", id)
             }
             QBCRequest::List => {
-                write!(f, "MSG_CONTROL_REQ_LIST")
+                write!(f, "QBC_MSG_REQ_LIST")
             }
         }
     }

@@ -21,7 +21,7 @@ use tracing::{info, info_span, warn};
 /// An error that occured related to the master
 #[derive(Error, Debug)]
 pub enum Error {
-    /// This error propagates when we try to detach an interface
+    /// This error propagates when we try to detach an interface or unhook a hook
     /// with an id, of which none such interface exists in this master.
     #[error("no interface with the given id was found")]
     NotFound,
@@ -29,6 +29,8 @@ pub enum Error {
     /// with an id, of which another interface is already attached.
     #[error("an interface with the same id is already attached")]
     AlreadyAttached,
+    /// This error propagates when we try to hook a hook
+    /// with an id, of which another hook is already hooked.
     #[error("a hook with the same id is already hooked")]
     AlreadyHooked,
 }
@@ -68,6 +70,9 @@ pub struct QBHHandle {
     tx: mpsc::Sender<QBHHostMessage>,
 }
 
+/// A hook handler function. This is needed, because the type of the
+/// interface context we send over the mpsc is Any and therefore the
+/// context must be downcast individually.
 pub type QBHHandlerFn = Rc<
     Box<
         dyn for<'a> Fn(&'a mut QBMaster, QBHSlaveMessage) -> Pin<Box<dyn Future<Output = ()> + 'a>>,
@@ -78,9 +83,11 @@ pub type QBHHandlerFn = Rc<
 /// to the individual interfaces and manages communication.
 pub struct QBMaster {
     interfaces: HashMap<QBIId, QBIHandle>,
+    /// Receiver for messages coming from interfaces.
     pub interface_rx: mpsc::Receiver<(QBIId, QBISlaveMessage)>,
     interface_tx: mpsc::Sender<(QBIId, QBISlaveMessage)>,
     hooks: HashMap<QBHId, QBHHandle>,
+    /// Receiver for messages coming from hooks.
     pub hook_rx: mpsc::Receiver<(QBHId, QBHSlaveMessage)>,
     hook_tx: mpsc::Sender<(QBHId, QBHSlaveMessage)>,
     devices: QBDeviceTable,
@@ -257,6 +264,7 @@ impl QBMaster {
                 Box::pin(async move {
                     match msg {
                         QBHSlaveMessage::Attach { context } => {
+                            // downcast the context
                             let context = *context.downcast::<T>().unwrap();
                             master.attach(QBIId::generate(), context).await.unwrap();
                         }

@@ -268,8 +268,15 @@ impl QBDaemon {
         match msg {
             QBCRequest::Start { id } => self.start(id).await?,
             QBCRequest::Stop { id } => self.stop(id).await?,
-            QBCRequest::Setup { name, blob } => {
+            QBCRequest::Add { name, blob } => {
                 self.setup(name, blob).await?;
+            }
+            QBCRequest::Remove { id } => {
+                if self.master.is_attached(&id) {
+                    self.master.detach(&id).await.unwrap().await.unwrap()
+                }
+                self.config.qbi_table.remove(&id);
+                self.save_conf().await;
             }
             QBCRequest::List => {
                 let handle = self.handles.get(&caller).unwrap();

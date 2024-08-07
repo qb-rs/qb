@@ -1,21 +1,71 @@
 // TODO: rustls TLS impl for preventing MITM attacks
 
+use std::net::SocketAddr;
+
 use bitcode::{Decode, Encode};
 use qb_core::common::QBDeviceId;
-use qb_ext::interface::{
-    QBIChannel, QBIContext, QBIHostMessage, QBIMessage, QBISetup, QBISlaveMessage,
+use qb_ext::{
+    hook::{QBHContext, QBHInit},
+    interface::{QBIChannel, QBIContext, QBIHostMessage, QBIMessage, QBISetup, QBISlaveMessage},
 };
 use qb_proto::QBP;
 use serde::{Deserialize, Serialize};
-use tokio::net::{TcpSocket, TcpStream};
-use tracing::{error, info};
+use tokio::net::{TcpListener, TcpSocket, TcpStream};
+use tracing::{error, info, warn};
+
+/// A hook which listens for incoming connections and yields
+/// a [QBIServerSocket].
+pub struct QBHServerSocket {
+    pub listener: TcpListener,
+    /// An authentication token sent on boot
+    pub auth: Vec<u8>,
+}
+
+impl QBHServerSocket {
+    /// Listen locally. Tries to bind a socket to
+    /// `0.0.0.0:{port}` and if it fails tries again with the
+    /// next successive port number.
+    pub async fn listen(mut port: u16, auth: impl Into<Vec<u8>>) -> QBHServerSocket {
+        let auth = auth.into();
+        let listener: TcpListener;
+        loop {
+            let addr: SocketAddr = format!("0.0.0.0:{}", port).parse().unwrap();
+            match TcpListener::bind(addr).await {
+                Ok(val) => {
+                    info!("successfully bind on {}", addr);
+                    listener = val;
+                    break;
+                }
+                Err(err) => {
+                    warn!("unable to bind on {}: {}", addr, err);
+                }
+            };
+            port += 1;
+        }
+
+        QBHServerSocket { auth, listener }
+    }
+}
+
+impl QBHContext<QBIServerSocket> for QBHServerSocket {
+    async fn run(self, init: QBHInit<QBIServerSocket>) {
+        loop {
+            // listen on incoming connections
+            let (stream, addr) = self.listener.accept().await.unwrap();
+            info!("connected: {}", addr);
+            // yield a [QBIServerSocket]
+            init.attach(QBIServerSocket {
+                stream,
+                auth: self.auth.clone(),
+            })
+            .await;
+        }
+    }
+}
 
 #[derive(Encode, Decode, Serialize, Deserialize, Debug)]
 pub struct QBIClientSocket {
-    /// A IPv4 addr
-    /// TODO: think about IPv6
     pub addr: String,
-
     /// An authentication token sent on boot
     #[serde(with = "serde_bytes")]
     pub auth: Vec<u8>,
@@ -50,20 +100,18 @@ impl QBIContext for QBIClientSocket {
 
 impl<'a> QBISetup<'a> for QBIClientSocket {
     async fn setup(self) {
-        // TODO: add initialization message
-        //todo!()
+        // nothing to do here
     }
 }
 
 #[derive(Debug)]
-pub struct QBISocket {
+pub struct QBIServerSocket {
     pub stream: TcpStream,
-
     /// An authentication token sent on boot
     pub auth: Vec<u8>,
 }
 
-impl QBIContext for QBISocket {
+impl QBIContext for QBIServerSocket {
     async fn run(self, host_id: QBDeviceId, com: QBIChannel) {
         let mut stream = self.stream;
         let mut protocol = QBP::default();

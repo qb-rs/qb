@@ -25,22 +25,30 @@ struct Cli {
 enum Commands {
     /// List the connected QBIs
     List,
-    /// Setup a new interface
-    Setup {
+    /// Add an interface
+    Add {
+        /// The name of the interface kind ("gdrive", "local", ...)
         name: String,
         #[arg(long = "type", default_value = "application/json")]
         content_type: String,
         content: Option<String>,
     },
+    #[command(alias = "rm")]
+    /// Remove an interface
+    Remove {
+        /// the id of the interface in hex format
+        #[arg(long="id", value_parser=parse_id)]
+        id: QBIId,
+    },
     /// Start an interface
     Start {
-        /// the id of the QBI in hex format
+        /// the id of the interface in hex format
         #[arg(long="id", value_parser=parse_id)]
         id: QBIId,
     },
     /// Stop an interface
     Stop {
-        /// the id of the QBI in hex format
+        /// the id of the interface in hex format
         #[arg(long="id", value_parser=parse_id)]
         id: QBIId,
     },
@@ -77,7 +85,7 @@ async fn main() {
 
 async fn process_args(args: Cli) -> Option<()> {
     match args.command {
-        Commands::Setup {
+        Commands::Add {
             name,
             content_type,
             content,
@@ -90,7 +98,7 @@ async fn process_args(args: Cli) -> Option<()> {
                     buf
                 }
             };
-            let req = QBCRequest::Setup {
+            let req = QBCRequest::Add {
                 blob: QBPBlob {
                     content_type,
                     content,
@@ -104,9 +112,16 @@ async fn process_args(args: Cli) -> Option<()> {
             protocol.send(&mut conn, req).await.unwrap();
             finish(protocol, conn).await;
         }
+        Commands::Remove { id } => {
+            let req = QBCRequest::Remove { id };
+            let mut conn = connect().await?;
+            let mut protocol = QBP::default();
+            protocol.negotiate(&mut conn).await.unwrap();
+            protocol.send(&mut conn, req).await.unwrap();
+            finish(protocol, conn).await;
+        }
         Commands::Start { id } => {
             let req = QBCRequest::Start { id };
-
             let mut conn = connect().await?;
             let mut protocol = QBP::default();
             protocol.negotiate(&mut conn).await.unwrap();

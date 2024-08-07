@@ -6,9 +6,9 @@
 //!
 //! We can communicate with the daemon using the [qb-control] messages.
 
-//#![warn(missing_docs)]
+#![warn(missing_docs)]
 
-use std::{net::SocketAddr, sync::Arc};
+use std::sync::Arc;
 
 use clap::Parser;
 use daemon::QBDaemon;
@@ -16,11 +16,10 @@ use interprocess::local_socket::{
     traits::tokio::Listener, GenericNamespaced, ListenerNonblockingMode, ListenerOptions, ToNsName,
 };
 use master::QBMaster;
-use qb_ext::hook::{QBHContext, QBHId, QBHInit};
+use qb_ext::hook::QBHId;
 use qbi_local::QBILocal;
-use qbi_socket::{QBIClientSocket, QBISocket};
-use tokio::net::TcpListener;
-use tracing::{info, warn};
+use qbi_socket::{QBHServerSocket, QBIClientSocket};
+use tracing::info;
 use tracing_panic::panic_hook;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
@@ -78,35 +77,10 @@ async fn main() {
         None
     };
 
-    let listener: TcpListener;
-    let mut port = 6969;
-    loop {
-        let addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
-        match TcpListener::bind(addr).await {
-            Ok(val) => {
-                info!("successfully bind on {}", addr);
-                listener = val;
-                break;
-            }
-            Err(err) => {
-                warn!("unable to bind on {}: {}", addr, err);
-            }
-        };
-        port += 1;
-    }
-
     // Initialize the master
     let mut master = QBMaster::init();
-    master
-        .hook(
-            QBHId::generate(),
-            ServerHook {
-                listener,
-                auth: b"kekw".into(),
-            },
-        )
-        .await
-        .unwrap();
+    let hook = QBHServerSocket::listen(6969, b"").await;
+    master.hook(QBHId::generate(), hook).await.unwrap();
 
     // Initialize the daemon
     let mut daemon = QBDaemon::init(master).await;
@@ -118,41 +92,24 @@ async fn main() {
         match &socket {
             Some(socket) => {
                 tokio::select! {
-                    // process qbi
+                    // process interfaces
                     Some(v) = daemon.master.interface_rx.recv() => daemon.master.iprocess(v).await,
+                    // process hooks
                     Some(v) = daemon.master.hook_rx.recv() => daemon.master.hprocess(v).await,
+                    // process control messages
                     Some(v) = daemon.req_rx.recv() => daemon.process(v).await,
-                    Ok(conn) = socket.accept() => {
-                        daemon.init_handle(conn).await;
-                    }
+                    // process daemon socket
+                    Ok(conn) = socket.accept() => daemon.init_handle(conn).await,
                 }
             }
             None => {
                 tokio::select! {
+                    // process interfaces
                     Some(v) = daemon.master.interface_rx.recv() => daemon.master.iprocess(v).await,
+                    // process hooks
                     Some(v) = daemon.master.hook_rx.recv() => daemon.master.hprocess(v).await,
                 }
             }
-        }
-    }
-}
-
-// TODO: make sure that what is yielded does not differ from what is stated
-struct ServerHook {
-    auth: Vec<u8>,
-    listener: TcpListener,
-}
-
-impl QBHContext<QBISocket> for ServerHook {
-    async fn run(self, init: QBHInit<QBISocket>) {
-        loop {
-            let (stream, addr) = self.listener.accept().await.unwrap();
-            info!("connected: {}", addr);
-            init.attach(QBISocket {
-                stream,
-                auth: self.auth.clone(),
-            })
-            .await;
         }
     }
 }
