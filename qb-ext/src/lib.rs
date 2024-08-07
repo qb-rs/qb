@@ -1,6 +1,8 @@
 //! qb-ext
 //!
-//! TODO: doc
+//! This crate exposes primitives about extending quixbyte's capabilities
+//! like adding interfaces and hooks or controlling the master via control
+//! messages.
 
 use tokio::sync::mpsc;
 

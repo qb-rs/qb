@@ -13,4 +13,4 @@ crate, that is, when it is not project specific.
 
 ----
 
-&copy; 2024 The QuixByte Project Authors
+&copy; 2024 The QuixByte Project Authors - All Rights Reserved

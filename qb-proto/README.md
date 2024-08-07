@@ -39,4 +39,4 @@ for content type and content encoding, which will then be used going forward.
 
 ----
 
-&copy; 2024 The QuixByte Project Authors
+&copy; 2024 The QuixByte Project Authors - All Rights Reserved
