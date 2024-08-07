@@ -198,18 +198,15 @@ impl Runner {
         // TODO: embed this directly
         let fschanges = self.fs.table.to_fschanges(changes.clone());
         self.fs.notify_changes(fschanges.iter());
-        self.fs.changelog.append(&mut changes.clone());
+        self.fs.changelog.append(&mut changes);
+        let common = self.fs.devices.get_common(&self.host_id).clone();
+        let changes = self.fs.changelog.after_cloned(&common).unwrap();
 
         // save the changes applied
         self.fs.save().await.unwrap();
 
         // notify remote
-        self.com
-            .send(QBIMessage::Sync {
-                common: self.fs.devices.get_common(&self.host_id).clone(),
-                changes: std::mem::take(&mut changes),
-            })
-            .await;
+        self.com.send(QBIMessage::Sync { common, changes }).await;
     }
 
     async fn run(mut self) {

@@ -104,11 +104,11 @@ impl QBMaster {
     ///
     /// This identifier should be negotiated and then stored
     /// somewhere and not randomly initialized every boot.
-    pub async fn init() -> QBMaster {
+    pub async fn init(wrapper: QBFSWrapper) -> QBMaster {
         let (interface_tx, interface_rx) = mpsc::channel(10);
         let (hook_tx, hook_rx) = mpsc::channel(10);
 
-        let wrapper = QBFSWrapper::new("./");
+        wrapper.init().await.unwrap();
         let devices = wrapper.dload(INTERNAL_DEVICES.as_ref()).await;
         let changelog = wrapper.dload(INTERNAL_CHANGELOG.as_ref()).await;
 
@@ -246,6 +246,8 @@ impl QBMaster {
                 }
 
                 *syncing = false;
+                self.save().await;
+                self.sync().await;
             }
             // TODO: negotiate this instead
             QBIMessage::Common { common } => {
@@ -264,8 +266,6 @@ impl QBMaster {
                 handle.tx.send(msg).await.unwrap();
             }
         }
-
-        self.sync().await;
     }
 
     /// Try to hook a hook to the master. Returns error if already hooked.

@@ -16,6 +16,6 @@ simdutf8 = "0.1.4"
 similar = "2.5.0"
 thiserror = "1.0.61"
 time = { version = "0.3.36", features = ["macros", "formatting"] }
-tokio = { version = "1.37.0", features = ["rt", "fs"] }
+tokio = { version = "1.37.0", features = ["fs"] }
 tracing = "0.1.40"
 waker-fn = "1.2.0"

@@ -4,12 +4,9 @@
 //! which handles controlling tasks and processes the control
 //! requests sent by those. It manages the [master].
 
+use qb_core::{common::qbpaths::INTERNAL_CONFIG, fs::wrapper::QBFSWrapper};
 use std::{collections::HashMap, future::Future, pin::Pin};
-use tokio::{
-    fs::File,
-    io::{AsyncReadExt, AsyncWriteExt},
-    sync::mpsc,
-};
+use tokio::sync::mpsc;
 
 use bitcode::{Decode, DecodeOwned, Encode};
 use interprocess::local_socket::tokio::Stream;
@@ -125,6 +122,7 @@ pub struct QBDaemon {
     start_fns: HashMap<String, QBIStartFn>,
     setup_fns: HashMap<String, QBISetupFn>,
     config: QBDaemonConfig,
+    wrapper: QBFSWrapper,
 
     req_tx: mpsc::Sender<(QBCId, QBCRequest)>,
     /// A channel for receiving messages from controlling tasks
@@ -133,31 +131,37 @@ pub struct QBDaemon {
 }
 
 impl QBDaemon {
-    /// The path to the config
-    pub const CONFIG_PATH: &'static str = "./qb-daemon.bin";
-
     /// Build the daemon
-    pub async fn init(master: QBMaster) -> Self {
+    pub async fn init(master: QBMaster, wrapper: QBFSWrapper) -> Self {
         let (req_tx, req_rx) = mpsc::channel(10);
-        let config = Self::load_conf().await;
+        let config = wrapper.dload(INTERNAL_CONFIG.as_ref()).await;
         Self {
-            master,
             start_fns: Default::default(),
             setup_fns: Default::default(),
             handles: Default::default(),
+            master,
+            wrapper,
             config,
             req_tx,
             req_rx,
         }
     }
 
-    /// TODO: doc
+    /// Start all available interfaces
     pub async fn autostart(&mut self) {
         // autostart
         let ids = self.config.qbi_table.keys().cloned().collect::<Vec<_>>();
         for id in ids {
             self.start(id.clone()).await.unwrap();
         }
+    }
+
+    /// Save daemon files
+    pub async fn save(&self) {
+        self.wrapper
+            .save(INTERNAL_CONFIG.as_ref(), &self.config)
+            .await
+            .unwrap();
     }
 
     /// Start an interface by the given id.
@@ -175,30 +179,6 @@ impl QBDaemon {
         Ok(())
     }
 
-    /// Save a configuration to the default path.
-    pub async fn save_conf(&mut self) {
-        let content = bitcode::encode(&self.config);
-        let mut conf_file = File::create(Self::CONFIG_PATH).await.unwrap();
-        conf_file.write_all(&content).await.unwrap();
-    }
-
-    /// Load a configuration from the default path.
-    pub async fn load_conf() -> QBDaemonConfig {
-        let exists = match tokio::fs::metadata(Self::CONFIG_PATH).await {
-            Ok(meta) => meta.is_file(),
-            Err(_) => false,
-        };
-
-        if exists {
-            let mut conf_file = File::open(Self::CONFIG_PATH).await.unwrap();
-            let mut contents = Vec::new();
-            conf_file.read_to_end(&mut contents).await.unwrap();
-            bitcode::decode(&contents).unwrap()
-        } else {
-            Default::default()
-        }
-    }
-
     /// Setup an interface.
     pub async fn setup(&mut self, name: String, blob: QBPBlob) -> Result<()> {
         let setup = self.setup_fns.get(&name).ok_or(Error::NotSupported)?;
@@ -207,7 +187,7 @@ impl QBDaemon {
         self.config
             .qbi_table
             .insert(id.clone(), QBIDescriptior { name, data });
-        self.save_conf().await;
+        self.save().await;
         self.start(id).await.unwrap();
         Ok(())
     }
@@ -285,7 +265,7 @@ impl QBDaemon {
                     self.master.detach(&id).await.unwrap().await.unwrap()
                 }
                 self.config.qbi_table.remove(&id);
-                self.save_conf().await;
+                self.save().await;
             }
             QBCRequest::List => {
                 let handle = self.handles.get(&caller).unwrap();

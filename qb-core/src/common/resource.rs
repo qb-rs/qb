@@ -33,6 +33,8 @@ pub mod qbpaths {
         pub static ref INTERNAL_IGNORE: QBPath = unsafe { QBPath::new("/.qb/ignore") };
         /// the internal devices path
         pub static ref INTERNAL_DEVICES: QBPath = unsafe { QBPath::new("/.qb/devices") };
+        /// the directory where the daemon config is stored
+        pub static ref INTERNAL_CONFIG: QBPath = unsafe { QBPath::new("/.qb/config") };
     }
 }
 

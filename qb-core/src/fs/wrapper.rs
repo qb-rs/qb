@@ -13,6 +13,7 @@ use crate::common::resource::{qbpaths, QBPath, QBResource, QBResourceKind};
 use super::{QBFSError, QBFSResult};
 
 /// struct which wraps the local file system
+#[derive(Clone)]
 pub struct QBFSWrapper {
     /// the root path
     pub root: PathBuf,
@@ -33,7 +34,7 @@ impl QBFSWrapper {
     }
 
     /// Make sure the filesystem is properly setup.
-    pub async fn init(&mut self) -> QBFSResult<()> {
+    pub async fn init(&self) -> QBFSResult<()> {
         tokio::fs::create_dir_all(self.fspath(qbpaths::INTERNAL.as_ref())).await?;
         Ok(())
     }
@@ -47,12 +48,12 @@ impl QBFSWrapper {
     ///
     /// returns the default value if an error is returned
     #[inline]
-    pub async fn dload<'a, T: DecodeOwned + Default>(&self, path: impl AsRef<QBPath>) -> T {
+    pub async fn dload<T: DecodeOwned + Default>(&self, path: impl AsRef<QBPath>) -> T {
         self.load(path).await.unwrap_or(Default::default())
     }
 
     /// Encode and save to a path
-    pub async fn save<'a, T: Encode>(&self, path: impl AsRef<QBPath>, item: &T) -> QBFSResult<()> {
+    pub async fn save(&self, path: impl AsRef<QBPath>, item: &impl Encode) -> QBFSResult<()> {
         tokio::fs::write(self.fspath(path), bitcode::encode(item)).await?;
         Ok(())
     }
@@ -61,13 +62,6 @@ impl QBFSWrapper {
     pub async fn contains(&self, resource: &QBResource) -> bool {
         tokio::fs::metadata(self.fspath(resource))
             .await
-            .map(|metadata| resource.is_file_type(metadata.file_type()))
-            .unwrap_or(false)
-    }
-
-    /// Returns whether this filesystem contains the given resource
-    pub fn contains_sync(&self, resource: &QBResource) -> bool {
-        std::fs::metadata(self.fspath(resource))
             .map(|metadata| resource.is_file_type(metadata.file_type()))
             .unwrap_or(false)
     }
@@ -95,37 +89,9 @@ impl QBFSWrapper {
         Ok(entries)
     }
 
-    /// Reads a directory synchronously
-    ///
-    /// Stops processing entries once an error occured and returns this error.
-    pub fn read_dir_sync(&self, path: impl AsRef<QBPath>) -> QBFSResult<Vec<QBResource>> {
-        let fspath = self.fspath(&path);
-
-        let mut entries = Vec::new();
-        for entry in std::fs::read_dir(fspath)? {
-            let entry = entry?;
-            let file_type = entry.file_type()?;
-            let file_name = Self::str(entry.file_name())?;
-
-            let resource = QBResource::new(
-                path.as_ref().clone().substitue(file_name)?,
-                QBResourceKind::from_file_type(file_type),
-            );
-
-            entries.push(resource);
-        }
-
-        Ok(entries)
-    }
-
     /// Read a path asynchronously
     pub async fn read(&self, path: impl AsRef<QBPath>) -> QBFSResult<Vec<u8>> {
         Ok(tokio::fs::read(self.fspath(path)).await?)
-    }
-
-    /// Read a path synchronously
-    pub fn read_sync(&self, path: impl AsRef<QBPath>) -> QBFSResult<Vec<u8>> {
-        Ok(std::fs::read(self.fspath(path))?)
     }
 
     /// Write to a path asynchronously
@@ -135,16 +101,6 @@ impl QBFSWrapper {
         contents: impl AsRef<[u8]>,
     ) -> QBFSResult<()> {
         tokio::fs::write(self.fspath(path), contents).await?;
-        Ok(())
-    }
-
-    /// Write to a path synchronously
-    pub fn write_sync(
-        &self,
-        path: impl AsRef<QBPath>,
-        contents: impl AsRef<[u8]>,
-    ) -> QBFSResult<()> {
-        std::fs::write(self.fspath(path), contents)?;
         Ok(())
     }
 

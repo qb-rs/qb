@@ -81,7 +81,7 @@ pub struct QBFS {
 impl QBFS {
     /// Initialize this file system
     pub async fn init(root: impl AsRef<Path>) -> Self {
-        let mut wrapper = QBFSWrapper::new(root);
+        let wrapper = QBFSWrapper::new(root);
         wrapper.init().await.unwrap();
 
         let tree = wrapper.dload(INTERNAL_FILETREE.as_ref()).await;

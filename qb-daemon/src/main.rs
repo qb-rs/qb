@@ -16,6 +16,7 @@ use interprocess::local_socket::{
     traits::tokio::Listener, GenericNamespaced, ListenerNonblockingMode, ListenerOptions, ToNsName,
 };
 use master::QBMaster;
+use qb_core::fs::wrapper::QBFSWrapper;
 use qb_ext::hook::QBHId;
 use qbi_local::QBILocal;
 use qbi_socket::{QBHServerSocket, QBIClientSocket};
@@ -36,9 +37,12 @@ struct Cli {
     /// Don't bind to a socket
     #[clap(long = "no-bind", overrides_with = "_bind")]
     no_bind: bool,
+
+    #[clap(long, short, default_value = "./")]
+    path: String,
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 async fn main() {
     let args = Cli::parse();
     let bind = !args.no_bind;
@@ -77,13 +81,14 @@ async fn main() {
         None
     };
 
+    let wrapper = QBFSWrapper::new(args.path);
     // Initialize the master
-    let mut master = QBMaster::init().await;
+    let mut master = QBMaster::init(wrapper.clone()).await;
     let hook = QBHServerSocket::listen(6969, b"").await;
     master.hook(QBHId::generate(), hook).await.unwrap();
 
     // Initialize the daemon
-    let mut daemon = QBDaemon::init(master).await;
+    let mut daemon = QBDaemon::init(master, wrapper).await;
     daemon.register::<QBILocal>("local");
     daemon.register::<QBIClientSocket>("client-socket");
     daemon.autostart().await;

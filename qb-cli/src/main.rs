@@ -37,19 +37,19 @@ enum Commands {
     /// Remove an interface
     Remove {
         /// the id of the interface in hex format
-        #[arg(long="id", value_parser=parse_id)]
+        #[arg(value_parser=parse_id)]
         id: QBIId,
     },
     /// Start an interface
     Start {
         /// the id of the interface in hex format
-        #[arg(long="id", value_parser=parse_id)]
+        #[arg(value_parser=parse_id)]
         id: QBIId,
     },
     /// Stop an interface
     Stop {
         /// the id of the interface in hex format
-        #[arg(long="id", value_parser=parse_id)]
+        #[arg(value_parser=parse_id)]
         id: QBIId,
     },
 }
@@ -58,7 +58,7 @@ fn parse_id(s: &str) -> Result<QBIId, String> {
     QBIId::from_hex(s).map_err(|e| e.to_string())
 }
 
-#[tokio::main]
+#[tokio::main(flavor = "current_thread")]
 async fn main() {
     let args = Cli::parse();
 

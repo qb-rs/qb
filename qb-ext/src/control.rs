@@ -132,13 +132,13 @@ impl fmt::Display for QBCResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             QBCResponse::Error { msg } => {
-                write!(f, "MSG_CONTROL_RESP_ERROR: {}", msg)
+                write!(f, "QBC_MSG_RESP_ERROR: {}", msg)
             }
             QBCResponse::Success => {
-                write!(f, "MSG_CONTROL_RESP_SUCCESS")
+                write!(f, "QBC_MSG_RESP_SUCCESS")
             }
             QBCResponse::List { list } => {
-                write!(f, "MSG_CONTROL_RESP_LIST:")?;
+                write!(f, "QBC_MSG_RESP_LIST:")?;
                 for entry in list {
                     write!(f, "\n{} - {}", entry.0, entry.1)?;
 

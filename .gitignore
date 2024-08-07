@@ -1,4 +1,4 @@
 /target
-/local*
+/run
 /drawio/*.bkp
-/qb-daemon.bin
+.qb
