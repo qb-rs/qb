@@ -2,11 +2,12 @@
 resolver = "2"
 members = [
   "qb-core",
+  "qb-proto",
+  "qb-control",
   "qb-daemon",
   "qb-cli",
-  "qb-control",
   "qbi-local",
-  "qb-proto",
+  "qbi-socket",
 ]
 
 [workspace.package]

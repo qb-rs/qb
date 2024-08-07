@@ -15,3 +15,4 @@ qb-core = { path = "../qb-core" }
 qb-proto = { path = "../qb-proto" }
 qb-control = { path = "../qb-control" }
 qbi-local = { path = "../qbi-local" }
+qbi-socket = { path = "../qbi-socket" }

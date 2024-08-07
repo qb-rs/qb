@@ -8,7 +8,7 @@
 
 #![warn(missing_docs)]
 
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
 use daemon::QBDaemon;
 use interprocess::local_socket::{
@@ -16,6 +16,9 @@ use interprocess::local_socket::{
 };
 use master::QBMaster;
 use qbi_local::QBILocal;
+use qbi_socket::QBIClientSocket;
+use tokio::net::TcpListener;
+use tracing::{info, warn};
 use tracing_panic::panic_hook;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
@@ -57,6 +60,24 @@ async fn main() {
     // Initialize the daemon
     let mut daemon = QBDaemon::init(master).await;
     daemon.register::<QBILocal>("local");
+    daemon.register::<QBIClientSocket>("client-socket");
+
+    let listener: TcpListener;
+    let mut port = 6969;
+    loop {
+        let addr: SocketAddr = format!("127.0.0.1:{}", port).parse().unwrap();
+        match TcpListener::bind(addr).await {
+            Ok(val) => {
+                info!("successfully bind on {}", addr);
+                listener = val;
+                break;
+            }
+            Err(err) => {
+                warn!("unable to bind on {}: {}", addr, err);
+            }
+        };
+        port += 1;
+    }
 
     // Process
     loop {
@@ -66,6 +87,9 @@ async fn main() {
             Some(v) = daemon.req_rx.recv() => daemon.process(v).await,
             Ok(conn) = socket.accept() => {
                 daemon.init_handle(conn).await;
+            }
+            Ok(stream) = listener.accept() => {
+                info!("received connection: {:?}", stream);
             }
         }
     }
