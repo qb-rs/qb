@@ -16,7 +16,7 @@ use qb_core::{
     interface::{Message, QBICommunication, QBIContext, QBIHostMessage, QBIId, QBISetup},
 };
 use serde::{Deserialize, Serialize};
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 
 #[derive(Encode, Decode, Serialize, Deserialize)]
 pub struct QBILocal {
@@ -25,16 +25,13 @@ pub struct QBILocal {
 
 impl QBIContext for QBILocal {
     async fn run(self, host_id: QBDeviceId, com: QBICommunication) {
-        Runner::init_async(self, host_id, com)
-            .await
-            .run_async()
-            .await;
+        Runner::init(self, host_id, com).await.run_async().await;
     }
 }
 
 impl<'a> QBISetup<'a> for QBILocal {
     async fn setup(self) -> QBIId {
-        QBIId::generate(QBDeviceId::generate())
+        QBIId::generate()
     }
 }
 
@@ -48,9 +45,13 @@ pub struct Runner {
 }
 
 impl Runner {
-    async fn init_async(cx: QBILocal, host_id: QBDeviceId, com: QBICommunication) -> Self {
+    async fn init(cx: QBILocal, host_id: QBDeviceId, com: QBICommunication) -> Self {
         let fs = QBFS::init(cx.path).await;
 
+        com.send(Message::Device {
+            device_id: fs.devices.host_id.clone(),
+        })
+        .await;
         com.send(Message::Common {
             common: fs.devices.get_common(&host_id).clone(),
         })
@@ -113,6 +114,7 @@ impl Runner {
                 self.fs.save().await.unwrap();
             }
             Message::Broadcast { msg } => println!("BROADCAST: {}", msg),
+            val => warn!("unexpected message: {}", val),
         }
     }
 

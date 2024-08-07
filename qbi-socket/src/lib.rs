@@ -37,7 +37,7 @@ impl QBIContext for QBIClientSocket {
         info!("connected to socket: {:?}", stream);
 
         let runner = Runner {
-            host_id,
+            _host_id: host_id,
             com,
             stream,
             protocol,

@@ -55,7 +55,7 @@ async fn main() {
         .unwrap();
 
     // Initialize the master
-    let master = QBMaster::init(Default::default());
+    let master = QBMaster::init();
 
     // Initialize the daemon
     let mut daemon = QBDaemon::init(master).await;

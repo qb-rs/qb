@@ -16,7 +16,7 @@ use tokio::{
     sync::mpsc,
     task::{AbortHandle, JoinHandle, JoinSet},
 };
-use tracing::{info, info_span};
+use tracing::{info, info_span, warn};
 
 /// An error that occured related to the master
 #[derive(Error, Debug)]
@@ -34,13 +34,36 @@ pub enum Error {
 /// Result type alias for making our life easier.
 pub type Result<T> = std::result::Result<T, Error>;
 
+/// The state which an interface can be in.
+pub enum QBIState {
+    /// no param known
+    Init,
+    /// device_id known, missing common hash
+    Device {
+        /// the device id
+        device_id: QBDeviceId,
+    },
+    /// device_id known, common hash known
+    Available {
+        /// the device id
+        device_id: QBDeviceId,
+        /// is the device currently synchronizing
+        syncing: bool,
+    },
+}
+
 /// A handle to an interface.
 pub struct QBIHandle {
     join_handle: JoinHandle<()>,
     abort_handle: AbortHandle,
+    state: QBIState,
+    com: QBIHandleCom,
+}
+
+/// This struct allows for partially borrowing the handle
+/// when sending a message to a handle.
+pub struct QBIHandleCom {
     tx: mpsc::Sender<QBIHostMessage>,
-    syncing: bool,
-    init: bool,
 }
 
 // struct used for pool receiving
@@ -50,7 +73,7 @@ struct Recv {
     msg: Option<QBISlaveMessage>,
 }
 
-impl QBIHandle {
+impl QBIHandleCom {
     /// Send a message to this interface.
     pub async fn send(&self, msg: impl Into<QBIHostMessage>) {
         self.tx.send(msg.into()).await.unwrap()
@@ -63,7 +86,6 @@ pub struct QBMaster {
     handles: HashMap<QBIId, QBIHandle>,
     devices: QBDeviceTable,
     changelog: QBChangelog,
-    device_id: QBDeviceId,
     recv_pool: JoinSet<Recv>,
 }
 
@@ -72,11 +94,10 @@ impl QBMaster {
     ///
     /// This identifier should be negotiated and then stored
     /// somewhere and not randomly initialized every boot.
-    pub fn init(device_id: QBDeviceId) -> QBMaster {
+    pub fn init() -> QBMaster {
         QBMaster {
             handles: HashMap::new(),
             recv_pool: JoinSet::new(),
-            device_id,
             // TODO: pass through constructor, these should be persistent
             devices: Default::default(),
             changelog: Default::default(),
@@ -155,7 +176,45 @@ impl QBMaster {
         let span = info_span!("qbi-process", id = id.to_hex());
         let _guard = span.enter();
         let handle = self.handles.get_mut(&id).unwrap();
-        let handle_common = self.devices.get_common(&id.device_id);
+
+        // handle uninitialized handles
+        let (device_id, syncing) = match handle.state {
+            QBIState::Available {
+                ref device_id,
+                ref mut syncing,
+            } => (device_id, syncing),
+            QBIState::Device { ref device_id } => {
+                match msg {
+                    Message::Common { common } => {
+                        // TODO: negotiate this instead
+                        self.devices.set_common(&device_id, common);
+                        handle.state = QBIState::Available {
+                            device_id: device_id.clone(),
+                            syncing: false,
+                        };
+                    }
+                    // The interface should not send any messages before the
+                    // init message has been sent. This is likely an error.
+                    val => warn!("unexpected message: {}", val),
+                }
+                return;
+            }
+            QBIState::Init => {
+                match msg {
+                    Message::Device { device_id } => {
+                        let common = self.devices.get_common(&device_id).clone();
+                        handle.state = QBIState::Device { device_id };
+                        handle.com.send(Message::Common { common }).await;
+                    }
+                    // The interface should not send any messages before the
+                    // init message has been sent. This is likely an error.
+                    val => warn!("unexpected message: {}", val),
+                }
+                return;
+            }
+        };
+
+        let handle_common = self.devices.get_common(&device_id);
 
         info!("recv: {}", msg);
 
@@ -172,11 +231,12 @@ impl QBMaster {
 
                 // Negotiate a new common hash
                 let new_common = self.changelog.head();
-                self.devices.set_common(&id.device_id, new_common);
+                self.devices.set_common(&device_id, new_common);
 
                 // Send sync to remote
-                if !handle.syncing {
+                if !*syncing {
                     handle
+                        .com
                         .send(Message::Sync {
                             common,
                             changes: local_entries,
@@ -184,19 +244,25 @@ impl QBMaster {
                         .await;
                 }
 
-                handle.syncing = false;
+                *syncing = false;
             }
+            // TODO: negotiate this instead
             Message::Common { common } => {
-                handle.init = true;
-                self.devices.set_common(&id.device_id, common);
+                self.devices.set_common(&device_id, common);
             }
             Message::Broadcast { msg } => broadcast.push(msg),
+            Message::Device { .. } => {
+                warn!("received init message, even though already initialized")
+            }
         }
 
         // send the broadcast messages
         for msg in broadcast {
             for handle in self.handles.values_mut() {
-                handle.send(Message::Broadcast { msg: msg.clone() }).await;
+                handle
+                    .com
+                    .send(Message::Broadcast { msg: msg.clone() })
+                    .await;
             }
         }
     }
@@ -224,16 +290,15 @@ impl QBMaster {
         // create the handle
         let handle = QBIHandle {
             join_handle: tokio::spawn(cx.run(
-                self.device_id.clone(),
+                self.devices.host_id.clone(),
                 QBICommunication {
                     rx: qbi_rx,
                     tx: qbi_tx,
                 },
             )),
             abort_handle,
-            tx: main_tx,
-            syncing: false,
-            init: false,
+            com: QBIHandleCom { tx: main_tx },
+            state: QBIState::Init,
         };
 
         self.handles.insert(id.clone(), handle);
@@ -250,7 +315,7 @@ impl QBMaster {
     /// Detach the given interface and return a join handle.
     pub async fn detach(&mut self, id: &QBIId) -> Result<JoinHandle<()>> {
         let handle = self.handles.remove(id).ok_or(Error::NotFound)?;
-        handle.send(QBIHostMessage::Stop).await;
+        handle.com.send(QBIHostMessage::Stop).await;
 
         Ok(handle.join_handle)
     }
@@ -266,33 +331,36 @@ impl QBMaster {
     /// # Cancelation safety
     /// This method is not cancelation safe.
     pub async fn sync(&mut self) {
-        for (id, handle) in self.handles.iter_mut() {
+        for (_, handle) in self.handles.iter_mut() {
             // skip uninitialized
-            if !handle.init {
-                continue;
+            if let QBIState::Available {
+                ref device_id,
+                ref mut syncing,
+            } = handle.state
+            {
+                // skip syncing
+                if *syncing {
+                    continue;
+                }
+
+                let handle_common = self.devices.get_common(&device_id);
+                let changes = self.changelog.after_cloned(handle_common).unwrap();
+
+                // skip if no changes to sync
+                if changes.is_empty() {
+                    continue;
+                }
+
+                // synchronize
+                *syncing = true;
+                handle
+                    .com
+                    .send(Message::Sync {
+                        common: handle_common.clone(),
+                        changes,
+                    })
+                    .await;
             }
-
-            // skip already synchronizing interfaces
-            if handle.syncing {
-                continue;
-            }
-
-            let handle_common = self.devices.get_common(&id.device_id);
-            let changes = self.changelog.after_cloned(handle_common).unwrap();
-
-            // skip if no changes to sync
-            if changes.is_empty() {
-                continue;
-            }
-
-            // synchronize
-            handle.syncing = true;
-            handle
-                .send(Message::Sync {
-                    common: handle_common.clone(),
-                    changes,
-                })
-                .await;
         }
     }
 
@@ -300,6 +368,6 @@ impl QBMaster {
     ///
     /// This is expected to never fail.
     pub async fn send(&self, id: &QBIId, msg: impl Into<QBIHostMessage>) {
-        self.handles.get(id).unwrap().send(msg).await
+        self.handles.get(id).unwrap().com.send(msg).await
     }
 }

@@ -29,11 +29,7 @@ use crate::{
 /// as each QBI is attached to exactly one device.
 #[derive(Encode, Decode, Serialize, Deserialize, Debug, Hash, Clone, Eq, PartialEq)]
 pub struct QBIId {
-    /// The id of the device this QBI is attached to
-    pub device_id: QBDeviceId,
-    /// A nonce to allow multiple QBIs on the same device
-    /// TODO: figure out if this is needed
-    /// TODO: figure out whether size is appropriate
+    /// The nonce of this Id
     pub nonce: u64,
 }
 
@@ -45,26 +41,24 @@ impl fmt::Display for QBIId {
 
 impl QBIId {
     /// Generate a QBIId for a QBI which operates on the device with the given device_id.
-    pub fn generate(device_id: QBDeviceId) -> Self {
+    pub fn generate() -> Self {
         let mut rng = rand::thread_rng();
         Self {
             nonce: rng.gen::<u64>(),
-            device_id,
         }
     }
 
     /// Get the string representation of this id in hex format
     pub fn to_hex(&self) -> String {
-        self.device_id.to_hex() + &hex::encode(self.nonce.to_be_bytes())
+        hex::encode(self.nonce.to_be_bytes())
     }
 
     /// Decode a hexadecimal string to an id
     pub fn from_hex(hex: impl AsRef<str>) -> Result<Self, FromHexError> {
-        let mut bytes = [0u8; 16];
+        let mut bytes = [0u8; 8];
         hex::decode_to_slice(hex.as_ref(), &mut bytes)?;
         Ok(Self {
-            device_id: QBDeviceId(u64::from_be_bytes(bytes[0..8].try_into().unwrap())),
-            nonce: u64::from_be_bytes(bytes[8..16].try_into().unwrap()),
+            nonce: u64::from_be_bytes(bytes),
         })
     }
 }
@@ -92,6 +86,14 @@ pub enum Message {
         /// a vector describing the changes
         changes: Vec<QBChange>,
     },
+    /// An interface might not be properly initialized
+    /// at attachment and we might not even know the Id
+    /// of the device we are connecting through. (server
+    /// doesn't know client device id before initialization).
+    Device {
+        /// The device id
+        device_id: QBDeviceId,
+    },
 }
 
 impl fmt::Display for Message {
@@ -113,6 +115,9 @@ impl fmt::Display for Message {
             }
             Message::Broadcast { msg } => {
                 write!(f, "MSG_BROADCAST {}", msg)
+            }
+            Message::Device { device_id } => {
+                write!(f, "MSG_DEVICE {}", device_id)
             }
         }
     }

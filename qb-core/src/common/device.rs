@@ -77,6 +77,8 @@ impl QBDeviceId {
 /// struct that stores common changes and names for all connections
 #[derive(Encode, Decode, Debug, Clone, Default)]
 pub struct QBDeviceTable {
+    /// The id of the device hosting this table
+    pub host_id: QBDeviceId,
     commons: HashMap<QBDeviceId, QBHash>,
     names: HashMap<QBDeviceId, String>,
 }
