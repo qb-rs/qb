@@ -4,7 +4,7 @@
 //! the daemon. Hooks are tasks which listen for messages coming from the
 //! master and control the master using hook messages.
 //!
-//! TODO: external hooks
+//! TODO: switch to mutex instead of using messaging
 
 use core::fmt;
 use std::future::Future;
@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::QBChannel;
 
 /// Communicate from the interface to the master
-pub type QBHChannel = QBChannel<QBHSlaveMessage, QBHHostMessage>;
+pub type QBHChannel = QBChannel<QBHId, QBHSlaveMessage, QBHHostMessage>;
 
 /// An identifier for a hook.
 #[derive(Encode, Decode, Serialize, Deserialize, Debug, Hash, Clone, Eq, PartialEq)]

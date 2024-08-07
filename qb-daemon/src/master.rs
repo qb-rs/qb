@@ -4,20 +4,18 @@
 //! which handles interfaces and their communication.
 //! It owns a device table and a changelog to allow syncing.
 
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
 
 use qb_core::{
     change::log::QBChangelog,
     common::device::{QBDeviceId, QBDeviceTable},
 };
-use qb_ext::interface::{
-    QBIChannel, QBIContext, QBIHostMessage, QBIId, QBIMessage, QBISlaveMessage,
+use qb_ext::{
+    hook::{QBHChannel, QBHContext, QBHHostMessage, QBHId, QBHSlaveMessage},
+    interface::{QBIChannel, QBIContext, QBIHostMessage, QBIId, QBIMessage, QBISlaveMessage},
 };
 use thiserror::Error;
-use tokio::{
-    sync::mpsc,
-    task::{AbortHandle, JoinHandle, JoinSet},
-};
+use tokio::{sync::mpsc, task::JoinHandle};
 use tracing::{info, info_span, warn};
 
 /// An error that occured related to the master
@@ -31,6 +29,8 @@ pub enum Error {
     /// with an id, of which another interface is already attached.
     #[error("an interface with the same id is already attached")]
     AlreadyAttached,
+    #[error("a hook with the same id is already hooked")]
+    AlreadyHooked,
 }
 
 /// Result type alias for making our life easier.
@@ -57,38 +57,27 @@ pub enum QBIState {
 /// A handle to an interface.
 pub struct QBIHandle {
     join_handle: JoinHandle<()>,
-    abort_handle: AbortHandle,
     state: QBIState,
-    com: QBIHandleCom,
-}
-
-/// This struct allows for partially borrowing the handle
-/// when sending a message to a handle.
-pub struct QBIHandleCom {
     tx: mpsc::Sender<QBIHostMessage>,
 }
 
-// struct used for pool receiving
-struct Recv {
-    id: QBIId,
-    rx: mpsc::Receiver<QBISlaveMessage>,
-    msg: Option<QBISlaveMessage>,
-}
-
-impl QBIHandleCom {
-    /// Send a message to this interface.
-    pub async fn send(&self, msg: impl Into<QBIHostMessage>) {
-        self.tx.send(msg.into()).await.unwrap()
-    }
+/// A handle to a hook.
+pub struct QBHHandle {
+    join_handle: JoinHandle<()>,
+    tx: mpsc::Sender<QBHHostMessage>,
 }
 
 /// The master, that is, the struct that houses connection
 /// to the individual interfaces and manages communication.
 pub struct QBMaster {
-    handles: HashMap<QBIId, QBIHandle>,
+    interfaces: HashMap<QBIId, QBIHandle>,
+    interface_rx: mpsc::Receiver<(QBIId, QBISlaveMessage)>,
+    interface_tx: mpsc::Sender<(QBIId, QBISlaveMessage)>,
+    hooks: HashMap<QBHId, QBHHandle>,
+    hook_rx: mpsc::Receiver<(QBHId, QBHSlaveMessage)>,
+    hook_tx: mpsc::Sender<(QBHId, QBHSlaveMessage)>,
     devices: QBDeviceTable,
     changelog: QBChangelog,
-    recv_pool: JoinSet<Recv>,
 }
 
 impl QBMaster {
@@ -97,9 +86,16 @@ impl QBMaster {
     /// This identifier should be negotiated and then stored
     /// somewhere and not randomly initialized every boot.
     pub fn init() -> QBMaster {
+        let (interface_tx, interface_rx) = mpsc::channel(10);
+        let (hook_tx, hook_rx) = mpsc::channel(10);
+
         QBMaster {
-            handles: HashMap::new(),
-            recv_pool: JoinSet::new(),
+            interfaces: HashMap::new(),
+            interface_rx,
+            interface_tx,
+            hooks: HashMap::new(),
+            hook_rx,
+            hook_tx,
             // TODO: pass through constructor, these should be persistent
             devices: Default::default(),
             changelog: Default::default(),
@@ -109,13 +105,13 @@ impl QBMaster {
     /// Remove unused handles [from interfaces that have finished]
     pub fn clean_handles(&mut self) {
         let to_remove = self
-            .handles
+            .interfaces
             .iter()
             .filter(|(_, v)| v.join_handle.is_finished())
             .map(|(k, _)| k.clone())
             .collect::<Vec<_>>();
         for id in to_remove {
-            self.handles.remove(&id);
+            self.interfaces.remove(&id);
         }
     }
 
@@ -123,40 +119,9 @@ impl QBMaster {
     ///
     /// # Cancelation safety
     /// This method is cancelation safe
-    pub async fn read(&mut self) -> (QBIId, QBISlaveMessage) {
+    pub async fn recv(&mut self) -> (QBIId, QBISlaveMessage) {
         // read loop
-        loop {
-            match self.recv_pool.join_next().await {
-                // handle message
-                Some(Ok(Recv {
-                    id,
-                    mut rx,
-                    msg: Some(msg),
-                })) => {
-                    // respawn receive task
-                    let handle = self.handles.get_mut(&id).unwrap();
-                    handle.abort_handle = self.recv_pool.spawn({
-                        let id = id.clone();
-                        async move {
-                            let msg = rx.recv().await;
-                            Recv { rx, msg, id }
-                        }
-                    });
-
-                    return (id, msg);
-                }
-                // propagate the error
-                Some(Err(err)) if err.is_panic() => {
-                    std::panic::resume_unwind(err.into_panic());
-                }
-                // no entry in join pool, delay to avoid high cpu usage
-                None => {
-                    tokio::time::sleep(Duration::from_millis(100)).await;
-                }
-                // the mpsc was closed, we do not respawn the receive task
-                _ => {}
-            }
-        }
+        self.interface_rx.recv().await.expect("channel closed")
     }
 
     /// This will look for new messages from the interfaces and
@@ -177,7 +142,7 @@ impl QBMaster {
 
         let span = info_span!("qbi-process", id = id.to_hex());
         let _guard = span.enter();
-        let handle = self.handles.get_mut(&id).unwrap();
+        let handle = self.interfaces.get_mut(&id).unwrap();
 
         // handle uninitialized handles
         let (device_id, syncing) = match handle.state {
@@ -206,7 +171,8 @@ impl QBMaster {
                     QBIMessage::Device { device_id } => {
                         let common = self.devices.get_common(&device_id).clone();
                         handle.state = QBIState::Device { device_id };
-                        handle.com.send(QBIMessage::Common { common }).await;
+                        let msg = QBIMessage::Common { common }.into();
+                        handle.tx.send(msg).await.unwrap();
                     }
                     // The interface should not send any messages before the
                     // init message has been sent. This is likely an error.
@@ -237,13 +203,12 @@ impl QBMaster {
 
                 // Send sync to remote
                 if !*syncing {
-                    handle
-                        .com
-                        .send(QBIMessage::Sync {
-                            common,
-                            changes: local_entries,
-                        })
-                        .await;
+                    let msg = QBIMessage::Sync {
+                        common,
+                        changes: local_entries,
+                    }
+                    .into();
+                    handle.tx.send(msg).await.unwrap();
                 }
 
                 *syncing = false;
@@ -260,47 +225,57 @@ impl QBMaster {
 
         // send the broadcast messages
         for msg in broadcast {
-            for handle in self.handles.values_mut() {
-                handle
-                    .com
-                    .send(QBIMessage::Broadcast { msg: msg.clone() })
-                    .await;
+            for handle in self.interfaces.values_mut() {
+                let msg = QBIMessage::Broadcast { msg: msg.clone() }.into();
+                handle.tx.send(msg).await.unwrap();
             }
         }
     }
 
-    /// Try to attach a QBI to the master. Returns none if already attached.
+    /// Try to hook a hook to the master. Returns error if already hooked.
+    pub async fn hook(&mut self, id: QBHId, cx: impl QBHContext) -> Result<()> {
+        // make sure we do not hook a hook twice
+        if self.is_hooked(&id) {
+            return Err(Error::AlreadyHooked);
+        }
+
+        let (master_tx, master_rx) = tokio::sync::mpsc::channel::<QBHHostMessage>(32);
+
+        // create the handle
+        let handle = QBHHandle {
+            join_handle: tokio::spawn(cx.run(QBHChannel::new(
+                id.clone(),
+                self.hook_tx.clone(),
+                master_rx,
+            ))),
+            tx: master_tx,
+        };
+
+        self.hooks.insert(id.clone(), handle);
+
+        Ok(())
+    }
+
+    /// Try to attach an interface to the master. Returns error if already attached.
     pub async fn attach(&mut self, id: QBIId, cx: impl QBIContext) -> Result<()> {
         // make sure we do not attach an interface twice
         if self.is_attached(&id) {
             return Err(Error::AlreadyAttached);
         }
 
-        let (main_tx, qbi_rx) = tokio::sync::mpsc::channel::<QBIHostMessage>(32);
-        let (qbi_tx, main_rx) = tokio::sync::mpsc::channel::<QBISlaveMessage>(32);
-
-        // spawn receive task
-        let abort_handle = self.recv_pool.spawn({
-            let id = id.clone();
-            let mut rx = main_rx;
-            async move {
-                let msg = rx.recv().await;
-                Recv { rx, msg, id }
-            }
-        });
+        let (master_tx, master_rx) = tokio::sync::mpsc::channel::<QBIHostMessage>(32);
 
         // create the handle
         let handle = QBIHandle {
             join_handle: tokio::spawn(cx.run(
                 self.devices.host_id.clone(),
-                QBIChannel::new(qbi_tx, qbi_rx),
+                QBIChannel::new(id.clone(), self.interface_tx.clone(), master_rx),
             )),
-            abort_handle,
-            com: QBIHandleCom { tx: main_tx },
+            tx: master_tx,
             state: QBIState::Init,
         };
 
-        self.handles.insert(id.clone(), handle);
+        self.interfaces.insert(id.clone(), handle);
 
         Ok(())
     }
@@ -308,13 +283,19 @@ impl QBMaster {
     /// Returns whether an interface with the given id is attached to the master.
     #[inline(always)]
     pub fn is_attached(&self, id: &QBIId) -> bool {
-        self.handles.contains_key(id)
+        self.interfaces.contains_key(id)
+    }
+
+    /// Returns whether an interface with the given id is attached to the master.
+    #[inline(always)]
+    pub fn is_hooked(&self, id: &QBHId) -> bool {
+        self.hooks.contains_key(id)
     }
 
     /// Detach the given interface and return a join handle.
     pub async fn detach(&mut self, id: &QBIId) -> Result<JoinHandle<()>> {
-        let handle = self.handles.remove(id).ok_or(Error::NotFound)?;
-        handle.com.send(QBIHostMessage::Stop).await;
+        let handle = self.interfaces.remove(id).ok_or(Error::NotFound)?;
+        handle.tx.send(QBIHostMessage::Stop).await.unwrap();
 
         Ok(handle.join_handle)
     }
@@ -322,7 +303,7 @@ impl QBMaster {
     /// Returns whether an interface with the given id is detached from the master.
     #[inline(always)]
     pub fn is_detached(&self, id: &QBIId) -> bool {
-        self.handles.contains_key(id)
+        self.interfaces.contains_key(id)
     }
 
     /// Synchronize changes across all interfaces.
@@ -330,7 +311,7 @@ impl QBMaster {
     /// # Cancelation safety
     /// This method is not cancelation safe.
     pub async fn sync(&mut self) {
-        for (_, handle) in self.handles.iter_mut() {
+        for (_, handle) in self.interfaces.iter_mut() {
             // skip uninitialized
             if let QBIState::Available {
                 ref device_id,
@@ -352,13 +333,12 @@ impl QBMaster {
 
                 // synchronize
                 *syncing = true;
-                handle
-                    .com
-                    .send(QBIMessage::Sync {
-                        common: handle_common.clone(),
-                        changes,
-                    })
-                    .await;
+                let msg = QBIMessage::Sync {
+                    common: handle_common.clone(),
+                    changes,
+                }
+                .into();
+                handle.tx.send(msg).await.unwrap();
             }
         }
     }
@@ -367,6 +347,7 @@ impl QBMaster {
     ///
     /// This is expected to never fail.
     pub async fn send(&self, id: &QBIId, msg: impl Into<QBIHostMessage>) {
-        self.handles.get(id).unwrap().com.send(msg).await
+        let handle = self.interfaces.get(id).unwrap();
+        handle.tx.send(msg.into()).await.unwrap()
     }
 }

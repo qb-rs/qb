@@ -30,7 +30,7 @@ use qb_core::{
 use crate::QBChannel;
 
 /// Communicate from the interface to the master
-pub type QBIChannel = QBChannel<QBISlaveMessage, QBIHostMessage>;
+pub type QBIChannel = QBChannel<QBIId, QBISlaveMessage, QBIHostMessage>;
 
 /// An identifier for an interface.
 #[derive(Encode, Decode, Serialize, Deserialize, Debug, Hash, Clone, Eq, PartialEq)]

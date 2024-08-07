@@ -27,12 +27,6 @@ impl fmt::Display for QBCId {
     }
 }
 
-impl AsRef<u64> for QBCId {
-    fn as_ref(&self) -> &u64 {
-        &self.0
-    }
-}
-
 impl QBCId {
     /// Generate a new ID
     pub fn generate() -> Self {

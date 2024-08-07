@@ -6,7 +6,7 @@
 //!
 //! We can communicate with the daemon using the [qb-control] messages.
 
-#![warn(missing_docs)]
+//#![warn(missing_docs)]
 
 use std::{net::SocketAddr, sync::Arc};
 
@@ -108,7 +108,7 @@ async fn main() {
             Some(socket) => {
                 tokio::select! {
                     // process qbi
-                    v = daemon.master.read() => daemon.master.process(v).await,
+                    v = daemon.master.recv() => daemon.master.process(v).await,
                     Some(v) = daemon.req_rx.recv() => daemon.process(v).await,
                     Ok(conn) = socket.accept() => {
                         daemon.init_handle(conn).await;
@@ -120,7 +120,7 @@ async fn main() {
             }
             None => {
                 tokio::select! {
-                    v = daemon.master.read() => daemon.master.process(v).await,
+                    v = daemon.master.recv() => daemon.master.process(v).await,
                     Ok(stream) = listener.accept() => {
                         info!("received connection: {:?}", stream);
                     }

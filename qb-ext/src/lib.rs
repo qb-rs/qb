@@ -10,21 +10,22 @@ pub mod control;
 pub mod hook;
 pub mod interface;
 
-/// A channel used for communication
-pub struct QBChannel<S, R> {
-    tx: mpsc::Sender<S>,
+/// A channel used for communication from a slave
+pub struct QBChannel<I: Clone, S, R> {
+    id: I,
+    tx: mpsc::Sender<(I, S)>,
     rx: mpsc::Receiver<R>,
 }
 
-impl<S, R> QBChannel<S, R> {
+impl<I: Clone, S, R> QBChannel<I, S, R> {
     /// Construct a new channel
-    pub fn new(tx: mpsc::Sender<S>, rx: mpsc::Receiver<R>) -> Self {
-        QBChannel { tx, rx }
+    pub fn new(id: I, tx: mpsc::Sender<(I, S)>, rx: mpsc::Receiver<R>) -> Self {
+        QBChannel { id, tx, rx }
     }
 
     /// Send a message to this channel
     pub async fn send(&self, msg: impl Into<S>) {
-        self.tx.send(msg.into()).await.unwrap()
+        self.tx.send((self.id.clone(), msg.into())).await.unwrap()
     }
 
     /// Receive a message from this channel
