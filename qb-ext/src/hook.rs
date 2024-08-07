@@ -7,17 +7,42 @@
 //! TODO: switch to mutex instead of using messaging
 
 use core::fmt;
-use std::future::Future;
+use std::{any::Any, future::Future, marker::PhantomData};
 
 use bitcode::{Decode, Encode};
 use hex::FromHexError;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::QBChannel;
+use crate::{interface::QBIContext, QBChannel};
 
 /// Communicate from the interface to the master
 pub type QBHChannel = QBChannel<QBHId, QBHSlaveMessage, QBHHostMessage>;
+
+/// TODO: figure out what to call this
+pub struct QBHInit<T: QBIContext + Any + Send> {
+    channel: QBHChannel,
+    _t: PhantomData<T>,
+}
+
+impl<T: QBIContext + Any + Send> QBHInit<T> {
+    pub async fn attach(&self, context: T) {
+        self.channel
+            .send(QBHSlaveMessage::Attach {
+                context: Box::new(context),
+            })
+            .await;
+    }
+}
+
+impl<T: QBIContext + Any + Send> From<QBHChannel> for QBHInit<T> {
+    fn from(value: QBHChannel) -> Self {
+        Self {
+            channel: value,
+            _t: PhantomData::default(),
+        }
+    }
+}
 
 /// An identifier for a hook.
 #[derive(Encode, Decode, Serialize, Deserialize, Debug, Hash, Clone, Eq, PartialEq)]
@@ -56,16 +81,15 @@ impl QBHId {
     }
 }
 
-pub enum QBHMessage {}
-
 pub enum QBHHostMessage {
-    Message(QBHMessage),
+    Stop,
 }
 
 pub enum QBHSlaveMessage {
-    Message(QBHMessage),
+    Attach { context: Box<dyn Any + Send> },
 }
 
-pub trait QBHContext {
-    fn run(self, com: QBHChannel) -> impl Future<Output = ()> + Send + 'static;
+/// A context which yields interfaces.
+pub trait QBHContext<T: QBIContext + Any + Send> {
+    fn run(self, init: QBHInit<T>) -> impl Future<Output = ()> + Send + 'static;
 }

@@ -4,7 +4,7 @@
 //! which handles interfaces and their communication.
 //! It owns a device table and a changelog to allow syncing.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, future::Future, pin::Pin, rc::Rc};
 
 use qb_core::{
     change::log::QBChangelog,
@@ -64,17 +64,24 @@ pub struct QBIHandle {
 /// A handle to a hook.
 pub struct QBHHandle {
     join_handle: JoinHandle<()>,
+    handler_fn: QBHHandlerFn,
     tx: mpsc::Sender<QBHHostMessage>,
 }
+
+pub type QBHHandlerFn = Rc<
+    Box<
+        dyn for<'a> Fn(&'a mut QBMaster, QBHSlaveMessage) -> Pin<Box<dyn Future<Output = ()> + 'a>>,
+    >,
+>;
 
 /// The master, that is, the struct that houses connection
 /// to the individual interfaces and manages communication.
 pub struct QBMaster {
     interfaces: HashMap<QBIId, QBIHandle>,
-    interface_rx: mpsc::Receiver<(QBIId, QBISlaveMessage)>,
+    pub interface_rx: mpsc::Receiver<(QBIId, QBISlaveMessage)>,
     interface_tx: mpsc::Sender<(QBIId, QBISlaveMessage)>,
     hooks: HashMap<QBHId, QBHHandle>,
-    hook_rx: mpsc::Receiver<(QBHId, QBHSlaveMessage)>,
+    pub hook_rx: mpsc::Receiver<(QBHId, QBHSlaveMessage)>,
     hook_tx: mpsc::Sender<(QBHId, QBHSlaveMessage)>,
     devices: QBDeviceTable,
     changelog: QBChangelog,
@@ -102,8 +109,18 @@ impl QBMaster {
         }
     }
 
+    /// This will process a message from a hook.
+    ///
+    /// # Cancelation Safety
+    /// This method is not cancelation safe.
+    pub async fn hprocess(&mut self, (id, msg): (QBHId, QBHSlaveMessage)) {
+        let handle = self.hooks.get(&id).unwrap();
+        let handler_fn = handle.handler_fn.clone();
+        handler_fn(self, msg).await;
+    }
+
     /// Remove unused handles [from interfaces that have finished]
-    pub fn clean_handles(&mut self) {
+    fn iclean_handles(&mut self) {
         let to_remove = self
             .interfaces
             .iter()
@@ -115,23 +132,12 @@ impl QBMaster {
         }
     }
 
-    /// Receive a message.
-    ///
-    /// # Cancelation safety
-    /// This method is cancelation safe
-    pub async fn recv(&mut self) -> (QBIId, QBISlaveMessage) {
-        // read loop
-        self.interface_rx.recv().await.expect("channel closed")
-    }
-
-    /// This will look for new messages from the interfaces and
-    /// handle those respectively. Additionally this will
-    /// synchronize when new changes arise.
+    /// This will process a message from an interface.
     ///
     /// # Cancelation Safety
     /// This method is not cancelation safe.
-    pub async fn process(&mut self, (id, msg): (QBIId, QBISlaveMessage)) {
-        self.clean_handles();
+    pub async fn iprocess(&mut self, (id, msg): (QBIId, QBISlaveMessage)) {
+        self.iclean_handles();
 
         let mut broadcast = Vec::new();
 
@@ -233,7 +239,11 @@ impl QBMaster {
     }
 
     /// Try to hook a hook to the master. Returns error if already hooked.
-    pub async fn hook(&mut self, id: QBHId, cx: impl QBHContext) -> Result<()> {
+    pub async fn hook<T: QBIContext + 'static>(
+        &mut self,
+        id: QBHId,
+        cx: impl QBHContext<T>,
+    ) -> Result<()> {
         // make sure we do not hook a hook twice
         if self.is_hooked(&id) {
             return Err(Error::AlreadyHooked);
@@ -243,11 +253,19 @@ impl QBMaster {
 
         // create the handle
         let handle = QBHHandle {
-            join_handle: tokio::spawn(cx.run(QBHChannel::new(
-                id.clone(),
-                self.hook_tx.clone(),
-                master_rx,
-            ))),
+            handler_fn: Rc::new(Box::new(move |master, msg| {
+                Box::pin(async move {
+                    match msg {
+                        QBHSlaveMessage::Attach { context } => {
+                            let context = *context.downcast::<T>().unwrap();
+                            master.attach(QBIId::generate(), context).await.unwrap();
+                        }
+                    }
+                })
+            })),
+            join_handle: tokio::spawn(
+                cx.run(QBHChannel::new(id.clone(), self.hook_tx.clone(), master_rx).into()),
+            ),
             tx: master_tx,
         };
 
@@ -296,6 +314,14 @@ impl QBMaster {
     pub async fn detach(&mut self, id: &QBIId) -> Result<JoinHandle<()>> {
         let handle = self.interfaces.remove(id).ok_or(Error::NotFound)?;
         handle.tx.send(QBIHostMessage::Stop).await.unwrap();
+
+        Ok(handle.join_handle)
+    }
+
+    /// Detach the given hook and return a join handle.
+    pub async fn unhook(&mut self, id: &QBHId) -> Result<JoinHandle<()>> {
+        let handle = self.hooks.remove(id).ok_or(Error::NotFound)?;
+        handle.tx.send(QBHHostMessage::Stop).await.unwrap();
 
         Ok(handle.join_handle)
     }
