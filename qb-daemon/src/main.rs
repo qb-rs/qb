@@ -10,6 +10,7 @@
 
 use std::{net::SocketAddr, sync::Arc};
 
+use clap::Parser;
 use daemon::QBDaemon;
 use interprocess::local_socket::{
     traits::tokio::Listener, GenericNamespaced, ListenerNonblockingMode, ListenerOptions, ToNsName,
@@ -25,8 +26,23 @@ use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, 
 pub mod daemon;
 pub mod master;
 
+#[derive(Parser)]
+#[command(version, about)]
+struct Cli {
+    /// Do not bind to a socket [default]
+    #[arg(long = "bind")]
+    _bind: bool,
+
+    /// Don't bind to a socket
+    #[clap(long = "no-bind", overrides_with = "_bind")]
+    no_bind: bool,
+}
+
 #[tokio::main]
 async fn main() {
+    let args = Cli::parse();
+    let bind = !args.no_bind;
+
     // Setup formatting
     std::panic::set_hook(Box::new(panic_hook));
 
@@ -46,13 +62,20 @@ async fn main() {
         )
         .init();
 
-    let name = "qb-daemon.sock";
-    let name = name.to_ns_name::<GenericNamespaced>().unwrap();
-    let socket = ListenerOptions::new()
-        .name(name)
-        .nonblocking(ListenerNonblockingMode::Both)
-        .create_tokio()
-        .unwrap();
+    let socket = if bind {
+        let name = "qb-daemon.sock";
+        info!("bind to socket {}", name);
+        let name = name.to_ns_name::<GenericNamespaced>().unwrap();
+        Some(
+            ListenerOptions::new()
+                .name(name)
+                .nonblocking(ListenerNonblockingMode::Both)
+                .create_tokio()
+                .unwrap(),
+        )
+    } else {
+        None
+    };
 
     // Initialize the master
     let master = QBMaster::init();
@@ -81,15 +104,24 @@ async fn main() {
 
     // Process
     loop {
-        tokio::select! {
-            // process qbi
-            v = daemon.master.read() => daemon.master.process(v).await,
-            Some(v) = daemon.req_rx.recv() => daemon.process(v).await,
-            Ok(conn) = socket.accept() => {
-                daemon.init_handle(conn).await;
+        match &socket {
+            Some(socket) => {
+                tokio::select! {
+                    // process qbi
+                    v = daemon.master.read() => daemon.master.process(v).await,
+                    Some(v) = daemon.req_rx.recv() => daemon.process(v).await,
+                    Ok(conn) = socket.accept() => {
+                        daemon.init_handle(conn).await;
+                    }
+                    Ok(stream) = listener.accept() => {
+                        info!("received connection: {:?}", stream);
+                    }
+                }
             }
-            Ok(stream) = listener.accept() => {
-                info!("received connection: {:?}", stream);
+            None => {
+                tokio::select! {
+                    v = daemon.master.read() => daemon.master.process(v).await,
+                }
             }
         }
     }

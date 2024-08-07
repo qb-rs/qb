@@ -968,6 +968,7 @@ name = "qb-daemon"
 version = "0.1.0"
 dependencies = [
  "bitcode",
+ "clap",
  "interprocess",
  "qb-control",
  "qb-core",
