@@ -1,9 +1,9 @@
 // TODO: rustls TLS impl for preventing MITM attacks
 
 use bitcode::{Decode, Encode};
-use qb_core::{
-    common::QBDeviceId,
-    interface::{Message, QBICommunication, QBIContext, QBISetup, QBISlaveMessage},
+use qb_core::common::QBDeviceId;
+use qb_ext::interface::{
+    QBIChannel, QBIContext, QBIHostMessage, QBIMessage, QBISetup, QBISlaveMessage,
 };
 use qb_proto::QBP;
 use serde::{Deserialize, Serialize};
@@ -22,7 +22,7 @@ pub struct QBIClientSocket {
 }
 
 impl QBIContext for QBIClientSocket {
-    async fn run(self, host_id: QBDeviceId, com: QBICommunication) {
+    async fn run(self, host_id: QBDeviceId, com: QBIChannel) {
         info!("initializing socket: {:#?}", self);
 
         let socket = TcpSocket::new_v4().unwrap();
@@ -64,11 +64,11 @@ pub struct QBISocket {
 }
 
 impl QBIContext for QBISocket {
-    async fn run(self, host_id: QBDeviceId, com: QBICommunication) {
+    async fn run(self, host_id: QBDeviceId, com: QBIChannel) {
         let mut stream = self.stream;
         let mut protocol = QBP::default();
         protocol.negotiate(&mut stream).await.unwrap();
-        let auth = protocol.read_payload(&mut stream).await.unwrap();
+        let auth = protocol.recv_payload(&mut stream).await.unwrap();
         if self.auth != auth {
             error!("client sent incorrect auth token!");
             return;
@@ -87,7 +87,7 @@ impl QBIContext for QBISocket {
 
 struct Runner {
     host_id: QBDeviceId,
-    com: QBICommunication,
+    com: QBIChannel,
     stream: TcpStream,
     protocol: QBP,
 }
@@ -98,7 +98,7 @@ impl Runner {
         self.protocol
             .send(
                 &mut self.stream,
-                Message::Device {
+                QBIMessage::Device {
                     device_id: self.host_id,
                 },
             )
@@ -108,10 +108,10 @@ impl Runner {
         // proxy messages
         loop {
             tokio::select! {
-                Ok(msg) = self.protocol.read::<Message>(&mut self.stream) => {
+                Ok(msg) = self.protocol.recv::<QBIMessage>(&mut self.stream) => {
                     self.com.send(QBISlaveMessage::Message(msg)).await;
                 },
-                msg = self.com.read() => {
+                msg = self.com.recv::<QBIHostMessage>() => {
                     self.protocol.send(&mut self.stream, msg).await.unwrap();
                 }
             }

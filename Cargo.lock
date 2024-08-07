@@ -76,6 +76,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arrayvec"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96d30a06541fbafbc7f82ed10c06164cfbd2c401138f6addd8404629c4b16711"
+
+[[package]]
 name = "autocfg"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -148,19 +154,22 @@ dependencies = [
 
 [[package]]
 name = "bitcode"
-version = "0.6.0"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48bc1c27654127a24c476d40198746860ef56475f41a601bfa5c4d0f832968f0"
+checksum = "ee1bce7608560cd4bf0296a4262d0dbf13e6bcec5ff2105724c8ab88cc7fc784"
 dependencies = [
+ "arrayvec",
  "bitcode_derive",
  "bytemuck",
+ "glam",
+ "serde",
 ]
 
 [[package]]
 name = "bitcode_derive"
-version = "0.6.0"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2966755a19aad59ee2aae91e2d48842c667a99d818ec72168efdab07200701cc"
+checksum = "a539389a13af092cd345a2b47ae7dec12deb306d660b2223d25cd3419b253ebe"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -480,6 +489,12 @@ name = "gimli"
 version = "0.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4271d37baee1b8c7e4b708028c57d816cf9d2434acb33a549475f78c181f6253"
+
+[[package]]
+name = "glam"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "779ae4bf7e8421cf91c0b3b64e7e8b40b862fba4d393f59150042de7c4965a94"
 
 [[package]]
 name = "glob"
@@ -919,27 +934,13 @@ dependencies = [
  "bitcode",
  "clap",
  "interprocess",
- "qb-control",
  "qb-core",
+ "qb-ext",
  "qb-proto",
  "tokio",
  "tracing",
  "tracing-panic",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "qb-control"
-version = "0.1.0"
-dependencies = [
- "bitcode",
- "hex",
- "qb-core",
- "qb-proto",
- "rand",
- "serde",
- "serde_bytes",
- "simdutf8",
 ]
 
 [[package]]
@@ -970,8 +971,8 @@ dependencies = [
  "bitcode",
  "clap",
  "interprocess",
- "qb-control",
  "qb-core",
+ "qb-ext",
  "qb-proto",
  "qbi-local",
  "qbi-socket",
@@ -980,6 +981,20 @@ dependencies = [
  "tracing",
  "tracing-panic",
  "tracing-subscriber",
+]
+
+[[package]]
+name = "qb-ext"
+version = "0.1.0"
+dependencies = [
+ "bitcode",
+ "hex",
+ "qb-core",
+ "qb-proto",
+ "rand",
+ "serde",
+ "simdutf8",
+ "tokio",
 ]
 
 [[package]]
@@ -1007,6 +1022,7 @@ dependencies = [
  "bitcode",
  "notify",
  "qb-core",
+ "qb-ext",
  "serde",
  "tokio",
  "tracing",
@@ -1018,6 +1034,7 @@ version = "0.1.0"
 dependencies = [
  "bitcode",
  "qb-core",
+ "qb-ext",
  "qb-proto",
  "rustls",
  "serde",
@@ -1413,9 +1430,9 @@ dependencies = [
 
 [[package]]
 name = "tokio"
-version = "1.39.1"
+version = "1.39.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d040ac2b29ab03b09d4129c2f5bbd012a3ac2f79d38ff506a4bf8dd34b0eac8a"
+checksum = "daa4fb1bc778bd6f04cbfc4bb2d06a7396a8f299dc33ea1900cedaa316f467b1"
 dependencies = [
  "backtrace",
  "bytes",

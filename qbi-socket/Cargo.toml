@@ -9,6 +9,7 @@ serde = { version = "1.0.204", features = ["derive"] }
 serde_bytes = "0.11.15"
 bitcode = "0.6.0"
 tracing = "0.1.40"
+rustls = "0.23.12"
 qb-core = { path = "../qb-core" }
 qb-proto = { path = "../qb-proto" }
-rustls = "0.23.12"
+qb-ext = { path = "../qb-ext" }

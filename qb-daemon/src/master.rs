@@ -9,7 +9,9 @@ use std::{collections::HashMap, time::Duration};
 use qb_core::{
     change::log::QBChangelog,
     common::device::{QBDeviceId, QBDeviceTable},
-    interface::{Message, QBICommunication, QBIContext, QBIHostMessage, QBIId, QBISlaveMessage},
+};
+use qb_ext::interface::{
+    QBIChannel, QBIContext, QBIHostMessage, QBIId, QBIMessage, QBISlaveMessage,
 };
 use thiserror::Error;
 use tokio::{
@@ -185,7 +187,7 @@ impl QBMaster {
             } => (device_id, syncing),
             QBIState::Device { ref device_id } => {
                 match msg {
-                    Message::Common { common } => {
+                    QBIMessage::Common { common } => {
                         // TODO: negotiate this instead
                         self.devices.set_common(&device_id, common);
                         handle.state = QBIState::Available {
@@ -201,10 +203,10 @@ impl QBMaster {
             }
             QBIState::Init => {
                 match msg {
-                    Message::Device { device_id } => {
+                    QBIMessage::Device { device_id } => {
                         let common = self.devices.get_common(&device_id).clone();
                         handle.state = QBIState::Device { device_id };
-                        handle.com.send(Message::Common { common }).await;
+                        handle.com.send(QBIMessage::Common { common }).await;
                     }
                     // The interface should not send any messages before the
                     // init message has been sent. This is likely an error.
@@ -219,7 +221,7 @@ impl QBMaster {
         info!("recv: {}", msg);
 
         match msg {
-            Message::Sync { common, changes } => {
+            QBIMessage::Sync { common, changes } => {
                 assert!(handle_common == &common);
 
                 // Find local changes
@@ -237,7 +239,7 @@ impl QBMaster {
                 if !*syncing {
                     handle
                         .com
-                        .send(Message::Sync {
+                        .send(QBIMessage::Sync {
                             common,
                             changes: local_entries,
                         })
@@ -247,11 +249,11 @@ impl QBMaster {
                 *syncing = false;
             }
             // TODO: negotiate this instead
-            Message::Common { common } => {
+            QBIMessage::Common { common } => {
                 self.devices.set_common(&device_id, common);
             }
-            Message::Broadcast { msg } => broadcast.push(msg),
-            Message::Device { .. } => {
+            QBIMessage::Broadcast { msg } => broadcast.push(msg),
+            QBIMessage::Device { .. } => {
                 warn!("received init message, even though already initialized")
             }
         }
@@ -261,7 +263,7 @@ impl QBMaster {
             for handle in self.handles.values_mut() {
                 handle
                     .com
-                    .send(Message::Broadcast { msg: msg.clone() })
+                    .send(QBIMessage::Broadcast { msg: msg.clone() })
                     .await;
             }
         }
@@ -291,10 +293,7 @@ impl QBMaster {
         let handle = QBIHandle {
             join_handle: tokio::spawn(cx.run(
                 self.devices.host_id.clone(),
-                QBICommunication {
-                    rx: qbi_rx,
-                    tx: qbi_tx,
-                },
+                QBIChannel::new(qbi_tx, qbi_rx),
             )),
             abort_handle,
             com: QBIHandleCom { tx: main_tx },
@@ -355,7 +354,7 @@ impl QBMaster {
                 *syncing = true;
                 handle
                     .com
-                    .send(Message::Sync {
+                    .send(QBIMessage::Sync {
                         common: handle_common.clone(),
                         changes,
                     })

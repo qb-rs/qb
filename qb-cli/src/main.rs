@@ -2,8 +2,10 @@ use std::{fs::File, sync::Arc};
 
 use clap::{Parser, Subcommand};
 use interprocess::local_socket::{traits::tokio::Stream, GenericNamespaced, ToNsName};
-use qb_control::{QBCRequest, QBCResponse};
-use qb_core::interface::QBIId;
+use qb_ext::{
+    control::{QBCRequest, QBCResponse},
+    interface::QBIId,
+};
 use qb_proto::{QBPBlob, QBP};
 use tokio::io::AsyncReadExt;
 use tracing_panic::panic_hook;
@@ -133,7 +135,7 @@ async fn process_args(args: Cli) -> Option<()> {
 }
 
 async fn finish(mut protocol: QBP, mut conn: TStream) {
-    let resp = protocol.read::<QBCResponse>(&mut conn).await.unwrap();
+    let resp = protocol.recv::<QBCResponse>(&mut conn).await.unwrap();
     match resp {
         QBCResponse::Error { .. } => eprintln!("{}", resp),
         _ => println!("{}", resp),

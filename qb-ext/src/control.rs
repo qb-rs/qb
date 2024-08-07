@@ -1,6 +1,6 @@
-//! # qb-control
+//! # quixbyte control (QBC)
 //!
-//! This crate contains primitives for controllers of
+//! This module contains primitives for controllers of
 //! a daemon. That is, messages for controlling a daemon,
 //! as well as an identifier for controlling tasks.
 
@@ -8,9 +8,9 @@
 
 use std::fmt;
 
+use crate::interface::QBIId;
 use bitcode::{Decode, Encode};
 use hex::FromHexError;
-use qb_core::interface::QBIId;
 
 use qb_proto::QBPBlob;
 

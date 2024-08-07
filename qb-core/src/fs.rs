@@ -1,5 +1,7 @@
 //! This module contains stuff related to the local filesystem.
 
+// TODO: figure out, whether this really belongs in the core crate
+
 pub mod table;
 pub mod tree;
 pub mod wrapper;

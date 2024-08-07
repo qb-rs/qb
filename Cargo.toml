@@ -3,7 +3,7 @@ resolver = "2"
 members = [
   "qb-core",
   "qb-proto",
-  "qb-control",
+  "qb-ext",
   "qb-daemon",
   "qb-cli",
   "qbi-local",

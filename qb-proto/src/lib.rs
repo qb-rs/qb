@@ -495,7 +495,7 @@ impl QBP {
         self.writer.write(write, packet).await
     }
 
-    /// Read a message from this protocol.
+    /// Receive a message from this protocol.
     ///
     /// You probably don't want to use this method, as-is,
     /// as content-type and content-encoding play no role here.
@@ -505,7 +505,7 @@ impl QBP {
     ///
     /// # Cancelation Safety
     /// This method is cancelation safe.
-    pub async fn read_packet(&mut self, read: &mut impl Read) -> Result<Vec<u8>> {
+    pub async fn recv_packet(&mut self, read: &mut impl Read) -> Result<Vec<u8>> {
         self.reader.read(read).await
     }
 
@@ -519,12 +519,12 @@ impl QBP {
         self.send_packet(write, &packet).await
     }
 
-    /// Read a binary payload through this protocol.
+    /// Receive a binary payload through this protocol.
     ///
     /// # Cancelation Safety
     /// This method is cancelation safe.
-    pub async fn read_payload(&mut self, read: &mut impl Read) -> Result<Vec<u8>> {
-        let packet = self.read_packet(read).await?;
+    pub async fn recv_payload(&mut self, read: &mut impl Read) -> Result<Vec<u8>> {
+        let packet = self.recv_packet(read).await?;
         let (_, content_encoding) = self.get_content()?;
         let payload = content_encoding.decode(&packet);
         Ok(payload)
@@ -548,11 +548,11 @@ impl QBP {
     ///
     /// # Cancelation Safety
     /// This method is cancelation safe.
-    pub async fn read<T>(&mut self, read: &mut impl Read) -> Result<T>
+    pub async fn recv<T>(&mut self, read: &mut impl Read) -> Result<T>
     where
         for<'a> T: QBPMessage<'a>,
     {
-        let packet = self.read_packet(read).await?;
+        let packet = self.recv_packet(read).await?;
         let (content_type, content_encoding) = self.get_content()?;
         let payload = content_encoding.decode(&packet);
         let message = content_type.from_bytes::<T>(&payload)?;
@@ -598,7 +598,7 @@ impl QBP {
         self.writer.flush(conn).await?;
 
         loop {
-            let packet = self.read_packet(conn).await?;
+            let packet = self.recv_packet(conn).await?;
 
             match &self.state {
                 QBPState::Negotiate => {
@@ -645,7 +645,7 @@ impl QBP {
         self.send_packet(conn, &header.serialize()).await?;
         self.state = QBPState::Negotiate;
 
-        let packet = self.read_packet(conn).await?;
+        let packet = self.recv_packet(conn).await?;
         let header = QBPHeaderPacket::deserialize(&packet)?;
         trace!("recv header: {:?}", header);
         let content_type = negotiate_content_type(&header.headers)

@@ -13,8 +13,8 @@ use qb_core::{
     change::{log::QBChangelog, transaction::QBTransaction, QBChange, QBChangeKind},
     common::device::QBDeviceId,
     fs::{QBFileDiff, QBFS},
-    interface::{Message, QBICommunication, QBIContext, QBIHostMessage, QBISetup},
 };
+use qb_ext::interface::{QBIChannel, QBIContext, QBIHostMessage, QBIMessage, QBISetup};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
@@ -24,7 +24,7 @@ pub struct QBILocal {
 }
 
 impl QBIContext for QBILocal {
-    async fn run(self, host_id: QBDeviceId, com: QBICommunication) {
+    async fn run(self, host_id: QBDeviceId, com: QBIChannel) {
         Runner::init(self, host_id, com).await.run().await;
     }
 }
@@ -38,7 +38,7 @@ impl<'a> QBISetup<'a> for QBILocal {
 }
 
 pub struct Runner {
-    com: QBICommunication,
+    com: QBIChannel,
     fs: QBFS,
     transaction: QBTransaction,
     syncing: bool,
@@ -47,14 +47,14 @@ pub struct Runner {
 }
 
 impl Runner {
-    async fn init(cx: QBILocal, host_id: QBDeviceId, com: QBICommunication) -> Self {
+    async fn init(cx: QBILocal, host_id: QBDeviceId, com: QBIChannel) -> Self {
         let fs = QBFS::init(cx.path).await;
 
-        com.send(Message::Device {
+        com.send(QBIMessage::Device {
             device_id: fs.devices.host_id.clone(),
         })
         .await;
-        com.send(Message::Common {
+        com.send(QBIMessage::Common {
             common: fs.devices.get_common(&host_id).clone(),
         })
         .await;
@@ -69,15 +69,15 @@ impl Runner {
         }
     }
 
-    async fn on_message(&mut self, msg: Message) {
+    async fn on_message(&mut self, msg: QBIMessage) {
         info!("recv {}", msg);
 
         match msg {
-            Message::Common { common } => {
+            QBIMessage::Common { common } => {
                 self.fs.devices.set_common(&self.host_id, common);
                 self.fs.save_devices().await.unwrap();
             }
-            Message::Sync { common, changes } => {
+            QBIMessage::Sync { common, changes } => {
                 assert!(self.fs.devices.get_common(&self.host_id).clone() == common);
 
                 let local_entries = self.fs.changelog.after(&common).unwrap();
@@ -103,7 +103,7 @@ impl Runner {
                 // Send sync to remote
                 if !self.syncing {
                     self.com
-                        .send(Message::Sync {
+                        .send(QBIMessage::Sync {
                             common,
                             changes: local_entries,
                         })
@@ -115,7 +115,7 @@ impl Runner {
                 // save the changes applied
                 self.fs.save().await.unwrap();
             }
-            Message::Broadcast { msg } => println!("BROADCAST: {}", msg),
+            QBIMessage::Broadcast { msg } => println!("BROADCAST: {}", msg),
             val => warn!("unexpected message: {}", val),
         }
     }
@@ -205,7 +205,7 @@ impl Runner {
 
         // notify remote
         self.com
-            .send(Message::Sync {
+            .send(QBIMessage::Sync {
                 common: self.fs.devices.get_common(&self.host_id).clone(),
                 changes: std::mem::take(&mut changes),
             })
@@ -213,10 +213,9 @@ impl Runner {
     }
 
     async fn run(mut self) {
-        let (tx, mut rx) = tokio::sync::mpsc::channel(10);
-
+        let (watcher_tx, mut watcher_rx) = tokio::sync::mpsc::channel(10);
         let mut watcher = notify::recommended_watcher(move |res: Result<Event, _>| {
-            tx.blocking_send(res).unwrap();
+            watcher_tx.blocking_send(res).unwrap();
         })
         .unwrap();
 
@@ -227,15 +226,17 @@ impl Runner {
             .unwrap();
 
         loop {
-            //let msg = self.com.rx.recv().await.unwrap();
             tokio::select! {
-                Some(msg) = self.com.rx.recv() => {
+                Some(msg) = self.com.recv() => {
                     match msg {
                         QBIHostMessage::Message(msg) => self.on_message(msg).await,
-                        QBIHostMessage::Stop => break
+                        QBIHostMessage::Stop => {
+                            info!("stopping...");
+                            break
+                        }
                     }
                 },
-                Some(Ok(event)) = rx.recv() => {
+                Some(Ok(event)) = watcher_rx.recv() => {
                     self.on_watcher(event).await;
                 },
                 _ = tokio::time::sleep(Duration::from_secs(1)), if self.should_sync() => {

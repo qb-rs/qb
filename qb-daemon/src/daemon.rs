@@ -13,8 +13,10 @@ use tokio::{
 
 use bitcode::{Decode, DecodeOwned, Encode};
 use interprocess::local_socket::tokio::Stream;
-use qb_control::{QBCId, QBCRequest, QBCResponse};
-use qb_core::interface::{QBIContext, QBIId, QBISetup};
+use qb_ext::{
+    control::{QBCId, QBCRequest, QBCResponse},
+    interface::{QBIContext, QBIId, QBISetup},
+};
 use qb_proto::{QBPBlob, QBP};
 use thiserror::Error;
 use tracing::{trace, trace_span, warn, Instrument};
