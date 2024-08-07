@@ -157,10 +157,20 @@ impl Runner {
         loop {
             tokio::select! {
                 Ok(msg) = self.protocol.recv::<QBIMessage>(&mut self.stream) => {
+                    info!("proxy to master: {}", msg);
                     self.com.send(QBISlaveMessage::Message(msg)).await;
                 },
                 msg = self.com.recv::<QBIHostMessage>() => {
-                    self.protocol.send(&mut self.stream, msg).await.unwrap();
+                    match msg {
+                        QBIHostMessage::Message(msg) => {
+                            info!("proxy to remote: {}", msg);
+                            self.protocol.send(&mut self.stream, msg).await.unwrap();
+                        }
+                        QBIHostMessage::Stop => {
+                            info!("stopping...");
+                            break;
+                        }
+                    }
                 }
             }
         }

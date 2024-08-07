@@ -33,7 +33,7 @@ use crate::QBChannel;
 pub type QBIChannel = QBChannel<QBIId, QBISlaveMessage, QBIHostMessage>;
 
 /// An identifier for an interface.
-#[derive(Encode, Decode, Serialize, Deserialize, Debug, Hash, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Serialize, Deserialize, Hash, Clone, Eq, PartialEq)]
 pub struct QBIId {
     /// The nonce of this Id
     pub nonce: u64,
@@ -42,6 +42,12 @@ pub struct QBIId {
 impl fmt::Display for QBIId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_hex())
+    }
+}
+
+impl fmt::Debug for QBIId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "QBIId({})", self.to_hex())
     }
 }
 

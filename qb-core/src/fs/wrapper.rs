@@ -47,10 +47,7 @@ impl QBFSWrapper {
     ///
     /// returns the default value if an error is returned
     #[inline]
-    pub async fn load_or_default<'a, T: DecodeOwned + Default>(
-        &self,
-        path: impl AsRef<QBPath>,
-    ) -> T {
+    pub async fn dload<'a, T: DecodeOwned + Default>(&self, path: impl AsRef<QBPath>) -> T {
         self.load(path).await.unwrap_or(Default::default())
     }
 

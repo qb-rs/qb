@@ -78,7 +78,7 @@ async fn main() {
     };
 
     // Initialize the master
-    let mut master = QBMaster::init();
+    let mut master = QBMaster::init().await;
     let hook = QBHServerSocket::listen(6969, b"").await;
     master.hook(QBHId::generate(), hook).await.unwrap();
 
@@ -86,6 +86,7 @@ async fn main() {
     let mut daemon = QBDaemon::init(master).await;
     daemon.register::<QBILocal>("local");
     daemon.register::<QBIClientSocket>("client-socket");
+    daemon.autostart().await;
 
     // Process
     loop {

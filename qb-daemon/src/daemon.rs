@@ -151,6 +151,15 @@ impl QBDaemon {
         }
     }
 
+    /// TODO: doc
+    pub async fn autostart(&mut self) {
+        // autostart
+        let ids = self.config.qbi_table.keys().cloned().collect::<Vec<_>>();
+        for id in ids {
+            self.start(id.clone()).await.unwrap();
+        }
+    }
+
     /// Start an interface by the given id.
     pub async fn start(&mut self, id: QBIId) -> Result<()> {
         let descriptor = self.config.get(&id)?;

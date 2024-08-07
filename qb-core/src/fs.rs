@@ -22,6 +22,10 @@ use crate::{
         diff::QBDiff,
         hash::QBHash,
         ignore::{QBIgnoreMap, QBIgnoreMapBuilder},
+        qbpaths::{
+            INTERNAL_CHANGELOG, INTERNAL_DEVICES, INTERNAL_FILETABLE, INTERNAL_FILETREE,
+            INTERNAL_IGNORE,
+        },
         resource::{qbpaths, QBPath, QBPathError},
     },
 };
@@ -80,22 +84,12 @@ impl QBFS {
         let mut wrapper = QBFSWrapper::new(root);
         wrapper.init().await.unwrap();
 
-        let tree = wrapper
-            .load_or_default::<QBFileTree>(qbpaths::INTERNAL_FILETREE.as_ref())
-            .await;
-        let table = wrapper
-            .load_or_default::<QBFileTable>(qbpaths::INTERNAL_FILETABLE.as_ref())
-            .await;
-        let ignore_builder = wrapper
-            .load_or_default::<QBIgnoreMapBuilder>(qbpaths::INTERNAL_IGNORE.as_ref())
-            .await;
+        let tree = wrapper.dload(INTERNAL_FILETREE.as_ref()).await;
+        let table = wrapper.dload(INTERNAL_FILETABLE.as_ref()).await;
+        let ignore_builder: QBIgnoreMapBuilder = wrapper.dload(INTERNAL_IGNORE.as_ref()).await;
         let ignore = ignore_builder.build(&table);
-        let devices = wrapper
-            .load_or_default::<QBDeviceTable>(qbpaths::INTERNAL_DEVICES.as_ref())
-            .await;
-        let changelog = wrapper
-            .load_or_default::<QBChangelog>(qbpaths::INTERNAL_CHANGELOG.as_ref())
-            .await;
+        let devices = wrapper.dload(INTERNAL_DEVICES.as_ref()).await;
+        let changelog = wrapper.dload(INTERNAL_CHANGELOG.as_ref()).await;
 
         println!("loaded {}", ignore);
 

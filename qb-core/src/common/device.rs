@@ -30,7 +30,7 @@ use crate::change::QB_CHANGELOG_BASE;
 use super::hash::QBHash;
 
 /// A device identifier.
-#[derive(Encode, Decode, Serialize, Deserialize, Default, Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Encode, Decode, Serialize, Deserialize, Default, Clone, Eq, PartialEq, Hash)]
 pub struct QBDeviceId(pub(crate) u64);
 
 impl From<&str> for QBDeviceId {
@@ -44,6 +44,12 @@ impl From<&str> for QBDeviceId {
 impl fmt::Display for QBDeviceId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_hex())
+    }
+}
+
+impl fmt::Debug for QBDeviceId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "QBDeviceId({})", self.to_hex())
     }
 }
 
@@ -75,12 +81,22 @@ impl QBDeviceId {
 }
 
 /// struct that stores common changes and names for all connections
-#[derive(Encode, Decode, Debug, Clone, Default)]
+#[derive(Encode, Decode, Debug, Clone)]
 pub struct QBDeviceTable {
     /// The id of the device hosting this table
     pub host_id: QBDeviceId,
     commons: HashMap<QBDeviceId, QBHash>,
     names: HashMap<QBDeviceId, String>,
+}
+
+impl Default for QBDeviceTable {
+    fn default() -> Self {
+        Self {
+            host_id: QBDeviceId::generate(),
+            commons: Default::default(),
+            names: Default::default(),
+        }
+    }
 }
 
 impl QBDeviceTable {

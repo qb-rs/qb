@@ -18,12 +18,18 @@ use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 /// An identifier to a daemon control handle.
-#[derive(Debug, Clone, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash)]
 pub struct QBCId(pub(crate) u64);
 
 impl fmt::Display for QBCId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_hex())
+    }
+}
+
+impl fmt::Debug for QBCId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "QBCId({})", self.to_hex())
     }
 }
 

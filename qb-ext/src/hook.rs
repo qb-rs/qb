@@ -45,7 +45,7 @@ impl<T: QBIContext + Any + Send> From<QBHChannel> for QBHInit<T> {
 }
 
 /// An identifier for a hook.
-#[derive(Encode, Decode, Serialize, Deserialize, Debug, Hash, Clone, Eq, PartialEq)]
+#[derive(Encode, Decode, Serialize, Deserialize, Hash, Clone, Eq, PartialEq)]
 pub struct QBHId {
     /// The nonce of this Id
     pub nonce: u64,
@@ -54,6 +54,12 @@ pub struct QBHId {
 impl fmt::Display for QBHId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_hex())
+    }
+}
+
+impl fmt::Debug for QBHId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "QBHId({})", self.to_hex())
     }
 }
 

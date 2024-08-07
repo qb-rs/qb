@@ -8,7 +8,11 @@ use std::{collections::HashMap, future::Future, pin::Pin, rc::Rc};
 
 use qb_core::{
     change::log::QBChangelog,
-    common::device::{QBDeviceId, QBDeviceTable},
+    common::{
+        device::{QBDeviceId, QBDeviceTable},
+        qbpaths::{INTERNAL_CHANGELOG, INTERNAL_DEVICES},
+    },
+    fs::wrapper::QBFSWrapper,
 };
 use qb_ext::{
     hook::{QBHChannel, QBHContext, QBHHostMessage, QBHId, QBHSlaveMessage},
@@ -92,6 +96,7 @@ pub struct QBMaster {
     hook_tx: mpsc::Sender<(QBHId, QBHSlaveMessage)>,
     devices: QBDeviceTable,
     changelog: QBChangelog,
+    wrapper: QBFSWrapper,
 }
 
 impl QBMaster {
@@ -99,9 +104,13 @@ impl QBMaster {
     ///
     /// This identifier should be negotiated and then stored
     /// somewhere and not randomly initialized every boot.
-    pub fn init() -> QBMaster {
+    pub async fn init() -> QBMaster {
         let (interface_tx, interface_rx) = mpsc::channel(10);
         let (hook_tx, hook_rx) = mpsc::channel(10);
+
+        let wrapper = QBFSWrapper::new("./");
+        let devices = wrapper.dload(INTERNAL_DEVICES.as_ref()).await;
+        let changelog = wrapper.dload(INTERNAL_CHANGELOG.as_ref()).await;
 
         QBMaster {
             interfaces: HashMap::new(),
@@ -110,10 +119,22 @@ impl QBMaster {
             hooks: HashMap::new(),
             hook_rx,
             hook_tx,
-            // TODO: pass through constructor, these should be persistent
-            devices: Default::default(),
-            changelog: Default::default(),
+            devices,
+            changelog,
+            wrapper,
         }
+    }
+
+    /// TODO: doc
+    pub async fn save(&self) {
+        self.wrapper
+            .save(INTERNAL_DEVICES.as_ref(), &self.devices)
+            .await
+            .unwrap();
+        self.wrapper
+            .save(INTERNAL_CHANGELOG.as_ref(), &self.changelog)
+            .await
+            .unwrap();
     }
 
     /// This will process a message from a hook.
@@ -157,6 +178,8 @@ impl QBMaster {
         let _guard = span.enter();
         let handle = self.interfaces.get_mut(&id).unwrap();
 
+        info!("recv: {}", msg);
+
         // handle uninitialized handles
         let (device_id, syncing) = match handle.state {
             QBIState::Available {
@@ -196,8 +219,6 @@ impl QBMaster {
         };
 
         let handle_common = self.devices.get_common(&device_id);
-
-        info!("recv: {}", msg);
 
         match msg {
             QBIMessage::Sync { common, changes } => {
@@ -243,6 +264,8 @@ impl QBMaster {
                 handle.tx.send(msg).await.unwrap();
             }
         }
+
+        self.sync().await;
     }
 
     /// Try to hook a hook to the master. Returns error if already hooked.
@@ -345,7 +368,7 @@ impl QBMaster {
     /// # Cancelation safety
     /// This method is not cancelation safe.
     pub async fn sync(&mut self) {
-        for (_, handle) in self.interfaces.iter_mut() {
+        for (id, handle) in self.interfaces.iter_mut() {
             // skip uninitialized
             if let QBIState::Available {
                 ref device_id,
@@ -364,6 +387,8 @@ impl QBMaster {
                 if changes.is_empty() {
                     continue;
                 }
+
+                info!("syncing with {}", id);
 
                 // synchronize
                 *syncing = true;
