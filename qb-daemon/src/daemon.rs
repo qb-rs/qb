@@ -8,13 +8,13 @@ use qb_core::{common::qbpaths::INTERNAL_CONFIG, fs::wrapper::QBFSWrapper};
 use std::{collections::HashMap, future::Future, pin::Pin};
 use tokio::sync::mpsc;
 
-use bitcode::{Decode, DecodeOwned, Encode};
+use bitcode::{Decode, Encode};
 use interprocess::local_socket::tokio::Stream;
 use qb_ext::{
     control::{QBCId, QBCRequest, QBCResponse},
     interface::{QBIContext, QBIId, QBISetup},
 };
-use qb_proto::{QBPBlob, QBP};
+use qb_proto::{QBPBlob, QBPDeserialize, QBP};
 use thiserror::Error;
 use tracing::{trace, trace_span, warn, Instrument};
 
@@ -208,16 +208,17 @@ impl QBDaemon {
     }
 
     /// Register a QBI kind.
-    pub fn register<T>(&mut self, name: impl Into<String>)
+    pub fn register<S, I>(&mut self, name: impl Into<String>)
     where
-        for<'a> T: QBIContext + QBISetup<'a> + DecodeOwned,
+        S: QBISetup<I> + QBPDeserialize,
+        I: QBIContext + Encode + for<'a> Decode<'a>,
     {
         let name = name.into();
         self.start_fns.insert(
             name.clone(),
             Box::new(move |qb, id, data| {
                 Box::pin(async move {
-                    qb.attach(id, bitcode::decode::<T>(&data).unwrap()).await?;
+                    qb.attach(id, bitcode::decode::<I>(&data).unwrap()).await?;
                     Ok(())
                 })
             }),
@@ -226,9 +227,9 @@ impl QBDaemon {
             name,
             Box::new(move |blob| {
                 Box::pin(async move {
-                    let cx = blob.deserialize::<T>()?;
+                    let setup = blob.deserialize::<S>()?;
+                    let cx = setup.setup().await;
                     let data = bitcode::encode(&cx);
-                    cx.setup().await;
                     Ok(data)
                 })
             }),

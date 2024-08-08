@@ -86,10 +86,7 @@ impl QBPBlob {
     ///
     /// This might throw an error if the content is malformed
     /// or the content type is not supported.
-    pub fn deserialize<T>(&self) -> Result<T>
-    where
-        for<'a> T: QBPMessage<'a>,
-    {
+    pub fn deserialize<T: QBPDeserialize>(&self) -> Result<T> {
         match SUPPORTED_CONTENT_TYPES.get(&self.content_type) {
             Some(content_type) => content_type.from_bytes(&self.content),
             None => Err(Error::NegotiationFailed(format!(
@@ -100,7 +97,7 @@ impl QBPBlob {
     }
 }
 
-/// The header packet which is used for content and version negotiation.
+/// The header packet whichOk(ServerCertVerified::assertion()) is used for content and version negotiation.
 #[derive(Debug)]
 pub struct QBPHeaderPacket {
     /// The major version of the QBP used to construct this packet.
@@ -367,10 +364,7 @@ pub enum QBPContentType {
 
 impl QBPContentType {
     /// Convert bytes of this content type to a message.
-    pub fn from_bytes<T>(&self, data: &[u8]) -> Result<T>
-    where
-        for<'a> T: QBPMessage<'a>,
-    {
+    pub fn from_bytes<T: QBPDeserialize>(&self, data: &[u8]) -> Result<T> {
         Ok(match self {
             QBPContentType::Json => T::from_json(data)?,
             QBPContentType::Bitcode => T::from_bitcode(data)?,
@@ -378,10 +372,7 @@ impl QBPContentType {
     }
 
     /// Convert a message to bytes of this content type.
-    pub fn to_bytes<T>(&self, msg: T) -> Result<Vec<u8>>
-    where
-        for<'a> T: QBPMessage<'a>,
-    {
+    pub fn to_bytes(&self, msg: impl QBPSerialize) -> Result<Vec<u8>> {
         Ok(match self {
             QBPContentType::Json => msg.to_json()?,
             QBPContentType::Bitcode => msg.to_bitcode(),
@@ -390,20 +381,10 @@ impl QBPContentType {
 }
 
 /// The message utility trait
-pub trait QBPMessage<'a>: Encode + Decode<'a> + Serialize + Deserialize<'a> {
-    /// Parse a message from an encoded json string.
-    fn from_json(data: &'a [u8]) -> Result<Self> {
-        serde_json::from_str::<Self>(simdutf8::basic::from_utf8(data)?).map_err(|e| e.into())
-    }
-
+pub trait QBPSerialize: Encode + Serialize {
     /// Dump a message into an encoded json string.
     fn to_json(&self) -> Result<Vec<u8>> {
         Ok(serde_json::to_string(self)?.into_bytes())
-    }
-
-    /// Parse a message from a bitcode binary.
-    fn from_bitcode(data: &'a [u8]) -> Result<Self> {
-        bitcode::decode(data).map_err(|e| e.into())
     }
 
     /// Dump a message into a bitcode binary.
@@ -411,9 +392,25 @@ pub trait QBPMessage<'a>: Encode + Decode<'a> + Serialize + Deserialize<'a> {
         bitcode::encode(self)
     }
 }
+impl<T> QBPSerialize for T where T: Encode + Serialize {}
 
-/// auto implement the message trait
-impl<'a, T> QBPMessage<'a> for T where T: Encode + Decode<'a> + Serialize + Deserialize<'a> {}
+/// The message utility trait
+pub trait QBPDeserialize: for<'a> Decode<'a> + for<'a> Deserialize<'a> {
+    /// Parse a message from an encoded json string.
+    fn from_json(data: &[u8]) -> Result<Self> {
+        serde_json::from_str::<Self>(simdutf8::basic::from_utf8(data)?).map_err(|e| e.into())
+    }
+
+    /// Parse a message from a bitcode binary.
+    fn from_bitcode(data: &[u8]) -> Result<Self> {
+        bitcode::decode(data).map_err(|e| e.into())
+    }
+}
+impl<T> QBPDeserialize for T where T: for<'a> Decode<'a> + for<'a> Deserialize<'a> {}
+
+/// The message utility trait
+pub trait QBPMessage: QBPSerialize + QBPDeserialize {}
+impl<T> QBPMessage for T where T: QBPSerialize + QBPDeserialize {}
 
 /// This enum represents the state a QBP connection is in.
 #[derive(Debug)]
@@ -534,10 +531,7 @@ impl QBP {
     ///
     /// # Cancelation Safety
     /// This method is cancelation safe.
-    pub async fn send<T>(&mut self, write: &mut impl Write, msg: T) -> Result<()>
-    where
-        for<'a> T: QBPMessage<'a>,
-    {
+    pub async fn send(&mut self, write: &mut impl Write, msg: impl QBPSerialize) -> Result<()> {
         let (content_type, content_encoding) = self.get_content()?;
         let payload = content_type.to_bytes(msg)?;
         let packet = content_encoding.encode(&payload);
@@ -548,10 +542,7 @@ impl QBP {
     ///
     /// # Cancelation Safety
     /// This method is cancelation safe.
-    pub async fn recv<T>(&mut self, read: &mut impl Read) -> Result<T>
-    where
-        for<'a> T: QBPMessage<'a>,
-    {
+    pub async fn recv<T: QBPDeserialize>(&mut self, read: &mut impl Read) -> Result<T> {
         let packet = self.recv_packet(read).await?;
         let (content_type, content_encoding) = self.get_content()?;
         let payload = content_encoding.decode(&packet);
@@ -583,10 +574,7 @@ impl QBP {
     ///
     /// # Cancelation Safety
     /// This method is cancelation safe.
-    pub async fn update<T>(&mut self, conn: &mut impl ReadWrite) -> Result<T>
-    where
-        for<'a> T: QBPMessage<'a>,
-    {
+    pub async fn update<T: QBPDeserialize>(&mut self, conn: &mut impl ReadWrite) -> Result<T> {
         // send header packet
         if let QBPState::Initial = self.state {
             self.state = QBPState::Negotiate;

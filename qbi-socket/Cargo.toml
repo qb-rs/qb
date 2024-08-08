@@ -15,3 +15,4 @@ qb-proto = { path = "../qb-proto" }
 qb-ext = { path = "../qb-ext" }
 tokio-rustls = "0.26.0"
 rcgen = "0.13.1"
+rustls-cert-gen = "0.1.0"

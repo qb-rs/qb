@@ -29,11 +29,12 @@ impl QBIContext for QBILocal {
     }
 }
 
-impl<'a> QBISetup<'a> for QBILocal {
-    async fn setup(self) {
-        let mut fs = QBFS::init(self.path).await;
+impl QBISetup<QBILocal> for QBILocal {
+    async fn setup(self) -> Self {
+        let mut fs = QBFS::init(self.path.clone()).await;
         fs.devices.host_id = QBDeviceId::generate();
         fs.save().await.unwrap();
+        self
     }
 }
 

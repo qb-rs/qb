@@ -19,7 +19,7 @@ use master::QBMaster;
 use qb_core::fs::wrapper::QBFSWrapper;
 use qb_ext::hook::QBHId;
 use qbi_local::QBILocal;
-use qbi_socket::{QBHServerSocket, QBIClientSocket};
+use qbi_socket::{QBHServerSocket, QBIClientSocket, QBIClientSocketSetup};
 use tracing::info;
 use tracing_panic::panic_hook;
 use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
@@ -89,8 +89,8 @@ async fn main() {
 
     // Initialize the daemon
     let mut daemon = QBDaemon::init(master, wrapper).await;
-    daemon.register::<QBILocal>("local");
-    daemon.register::<QBIClientSocket>("client-socket");
+    daemon.register::<QBILocal, QBILocal>("local");
+    daemon.register::<QBIClientSocketSetup, QBIClientSocket>("client-socket");
     daemon.autostart().await;
 
     // Process
