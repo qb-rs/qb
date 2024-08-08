@@ -5,8 +5,8 @@
 //! requests sent by those. It manages the [master].
 
 use qb_core::{common::qbpaths::INTERNAL_CONFIG, fs::wrapper::QBFSWrapper};
-use std::{collections::HashMap, future::Future, pin::Pin};
-use tokio::sync::mpsc;
+use std::{collections::HashMap, future::Future, pin::Pin, time::Duration};
+use tokio::{sync::mpsc, task::JoinSet};
 
 use bitcode::{Decode, Encode};
 use interprocess::local_socket::tokio::Stream;
@@ -16,7 +16,7 @@ use qb_ext::{
 };
 use qb_proto::{QBPBlob, QBPDeserialize, QBP};
 use thiserror::Error;
-use tracing::{trace, trace_span, warn, Instrument};
+use tracing::{info_span, trace, warn, Instrument};
 
 use crate::master::QBMaster;
 
@@ -57,8 +57,7 @@ pub type QBIStartFn = Box<
     ) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>>,
 >;
 /// Function pointer to a function which sets up an interface.
-pub type QBISetupFn =
-    Box<dyn Fn(QBPBlob) -> Pin<Box<dyn Future<Output = Result<Vec<u8>>> + 'static>>>;
+pub type QBISetupFn = Box<dyn Fn(&mut JoinSet<Result<QBIDescriptior>>, String, QBPBlob)>;
 
 /// A handle to a task processing a QBP stream for controlling the daemon.
 pub struct QBCHandle {
@@ -112,6 +111,26 @@ impl QBDaemonConfig {
     }
 }
 
+/// TODO: doc
+#[derive(Default)]
+pub struct Setup {
+    join_set: JoinSet<Result<QBIDescriptior>>,
+}
+
+impl Setup {
+    /// TODO: doc
+    pub async fn join(&mut self) -> QBIDescriptior {
+        loop {
+            match self.join_set.join_next().await {
+                Some(Ok(Ok(val))) => return val,
+                Some(Ok(Err(err))) => warn!("setup error: {}", err),
+                None => tokio::time::sleep(Duration::from_secs(1)).await,
+                Some(Err(_)) => {}
+            }
+        }
+    }
+}
+
 /// This struct represents a daemon, which handles connection to
 /// control tasks and their communication.
 pub struct QBDaemon {
@@ -123,6 +142,9 @@ pub struct QBDaemon {
     setup_fns: HashMap<String, QBISetupFn>,
     config: QBDaemonConfig,
     wrapper: QBFSWrapper,
+
+    /// TODO: doc
+    pub setup: Setup,
 
     req_tx: mpsc::Sender<(QBCId, QBCRequest)>,
     /// A channel for receiving messages from controlling tasks
@@ -139,6 +161,7 @@ impl QBDaemon {
             start_fns: Default::default(),
             setup_fns: Default::default(),
             handles: Default::default(),
+            setup: Default::default(),
             master,
             wrapper,
             config,
@@ -154,6 +177,15 @@ impl QBDaemon {
         for id in ids {
             self.start(id.clone()).await.unwrap();
         }
+    }
+
+    /// TODO: doc
+    pub async fn process_setup(&mut self, descriptor: QBIDescriptior) -> Result<()> {
+        let id = QBIId::generate();
+        self.config.qbi_table.insert(id.clone(), descriptor);
+        self.save().await;
+        self.start(id).await?;
+        Ok(())
     }
 
     /// Save daemon files
@@ -180,15 +212,9 @@ impl QBDaemon {
     }
 
     /// Setup an interface.
-    pub async fn setup(&mut self, name: String, blob: QBPBlob) -> Result<()> {
+    pub fn setup(&mut self, name: String, blob: QBPBlob) -> Result<()> {
         let setup = self.setup_fns.get(&name).ok_or(Error::NotSupported)?;
-        let data = setup(blob).await?;
-        let id = QBIId::generate();
-        self.config
-            .qbi_table
-            .insert(id.clone(), QBIDescriptior { name, data });
-        self.save().await;
-        self.start(id).await.unwrap();
+        setup(&mut self.setup.join_set, name, blob);
         Ok(())
     }
 
@@ -211,7 +237,7 @@ impl QBDaemon {
     pub fn register<S, I>(&mut self, name: impl Into<String>)
     where
         S: QBISetup<I> + QBPDeserialize,
-        I: QBIContext + Encode + for<'a> Decode<'a>,
+        I: QBIContext + Encode + for<'a> Decode<'a> + 'static,
     {
         let name = name.into();
         self.start_fns.insert(
@@ -225,13 +251,14 @@ impl QBDaemon {
         );
         self.setup_fns.insert(
             name,
-            Box::new(move |blob| {
-                Box::pin(async move {
+            Box::new(move |join_set, name, blob| {
+                join_set.spawn(async move {
+                    let span = info_span!("qbi-setup", name);
                     let setup = blob.deserialize::<S>()?;
-                    let cx = setup.setup().await;
+                    let cx = setup.setup().instrument(span).await;
                     let data = bitcode::encode(&cx);
-                    Ok(data)
-                })
+                    Ok(QBIDescriptior { name, data })
+                });
             }),
         );
     }
@@ -259,7 +286,7 @@ impl QBDaemon {
             QBCRequest::Start { id } => self.start(id).await?,
             QBCRequest::Stop { id } => self.stop(id).await?,
             QBCRequest::Add { name, blob } => {
-                self.setup(name, blob).await?;
+                self.setup(name, blob)?;
             }
             QBCRequest::Remove { id } => {
                 if self.master.is_attached(&id) {
@@ -296,7 +323,7 @@ impl QBDaemon {
 }
 
 async fn handle_run(mut init: HandleInit) {
-    let span = trace_span!("handle", id = init.id.to_hex());
+    let span = info_span!("handle", id = init.id.to_hex());
 
     match _handle_run(&mut init).instrument(span.clone()).await {
         Err(err) => span.in_scope(|| warn!("handle finished with error: {:?}", err)),

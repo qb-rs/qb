@@ -8,7 +8,7 @@
 
 #![warn(missing_docs)]
 
-use std::sync::Arc;
+use std::{str::FromStr, sync::Arc};
 
 use clap::Parser;
 use daemon::QBDaemon;
@@ -19,10 +19,10 @@ use master::QBMaster;
 use qb_core::fs::wrapper::QBFSWrapper;
 use qb_ext::hook::QBHId;
 use qbi_local::QBILocal;
-use qbi_socket::{QBHServerSocket, QBIClientSocket, QBIClientSocketSetup};
-use tracing::info;
+use qbi_tcp::{QBHTCPServer, QBITCPClient};
+use tracing::{info, level_filters::LevelFilter};
 use tracing_panic::panic_hook;
-use tracing_subscriber::{filter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 pub mod daemon;
 pub mod master;
@@ -58,10 +58,11 @@ async fn main() {
         .with_ansi(false)
         .with_writer(Arc::new(file));
 
+    let env_log_level = std::env::var("LOG_LEVEL").unwrap_or("info".to_string());
     tracing_subscriber::registry()
         .with(
             stdout_log
-                .with_filter(filter::LevelFilter::INFO)
+                .with_filter(LevelFilter::from_str(env_log_level.as_str()).unwrap())
                 .and_then(debug_log),
         )
         .init();
@@ -84,13 +85,15 @@ async fn main() {
     let wrapper = QBFSWrapper::new(args.path);
     // Initialize the master
     let mut master = QBMaster::init(wrapper.clone()).await;
-    let hook = QBHServerSocket::listen(6969, b"").await;
+
+    // TODO: persistent hook
+    let hook = QBHTCPServer::listen(6969, b"").await;
     master.hook(QBHId::generate(), hook).await.unwrap();
 
     // Initialize the daemon
     let mut daemon = QBDaemon::init(master, wrapper).await;
     daemon.register::<QBILocal, QBILocal>("local");
-    daemon.register::<QBIClientSocketSetup, QBIClientSocket>("client-socket");
+    daemon.register::<QBITCPClient, QBITCPClient>("tcp");
     daemon.autostart().await;
 
     // Process
@@ -106,6 +109,8 @@ async fn main() {
                     Some(v) = daemon.req_rx.recv() => daemon.process(v).await,
                     // process daemon socket
                     Ok(conn) = socket.accept() => daemon.init_handle(conn).await,
+                    // process daemon setup queue
+                    v = daemon.setup.join() => daemon.process_setup(v).await.unwrap(),
                 }
             }
             None => {
@@ -114,6 +119,8 @@ async fn main() {
                     Some(v) = daemon.master.interface_rx.recv() => daemon.master.iprocess(v).await,
                     // process hooks
                     Some(v) = daemon.master.hook_rx.recv() => daemon.master.hprocess(v).await,
+                    // process daemon setup queue
+                    v = daemon.setup.join() => daemon.process_setup(v).await.unwrap(),
                 }
             }
         }

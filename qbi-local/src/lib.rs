@@ -71,7 +71,7 @@ impl Runner {
     }
 
     async fn on_message(&mut self, msg: QBIMessage) {
-        info!("recv {}", msg);
+        debug!("recv {}", msg);
 
         match msg {
             QBIMessage::Common { common } => {

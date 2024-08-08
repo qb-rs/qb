@@ -20,7 +20,7 @@ use qb_ext::{
 };
 use thiserror::Error;
 use tokio::{sync::mpsc, task::JoinHandle};
-use tracing::{info, info_span, warn};
+use tracing::{debug, info, info_span, warn, Instrument};
 
 /// An error that occured related to the master
 #[derive(Error, Debug)]
@@ -178,7 +178,7 @@ impl QBMaster {
         let _guard = span.enter();
         let handle = self.interfaces.get_mut(&id).unwrap();
 
-        info!("recv: {}", msg);
+        debug!("recv: {}", msg);
 
         // handle uninitialized handles
         let (device_id, syncing) = match handle.state {
@@ -274,6 +274,8 @@ impl QBMaster {
         id: QBHId,
         cx: impl QBHContext<T>,
     ) -> Result<()> {
+        let span = info_span!("qb-hook", id = id.to_hex());
+
         // make sure we do not hook a hook twice
         if self.is_hooked(&id) {
             return Err(Error::AlreadyHooked);
@@ -295,7 +297,8 @@ impl QBMaster {
                 })
             })),
             join_handle: tokio::spawn(
-                cx.run(QBHChannel::new(id.clone(), self.hook_tx.clone(), master_rx).into()),
+                cx.run(QBHChannel::new(id.clone(), self.hook_tx.clone(), master_rx).into())
+                    .instrument(span),
             ),
             tx: master_tx,
         };
@@ -307,6 +310,8 @@ impl QBMaster {
 
     /// Try to attach an interface to the master. Returns error if already attached.
     pub async fn attach(&mut self, id: QBIId, cx: impl QBIContext) -> Result<()> {
+        let span = info_span!("qb-interface", id = id.to_hex());
+
         // make sure we do not attach an interface twice
         if self.is_attached(&id) {
             return Err(Error::AlreadyAttached);
@@ -316,10 +321,13 @@ impl QBMaster {
 
         // create the handle
         let handle = QBIHandle {
-            join_handle: tokio::spawn(cx.run(
-                self.devices.host_id.clone(),
-                QBIChannel::new(id.clone(), self.interface_tx.clone(), master_rx),
-            )),
+            join_handle: tokio::spawn(
+                cx.run(
+                    self.devices.host_id.clone(),
+                    QBIChannel::new(id.clone(), self.interface_tx.clone(), master_rx),
+                )
+                .instrument(span),
+            ),
             tx: master_tx,
             state: QBIState::Init,
         };

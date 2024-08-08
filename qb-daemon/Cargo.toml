@@ -21,4 +21,4 @@ qb-core = { path = "../qb-core" }
 qb-proto = { path = "../qb-proto" }
 qb-ext = { path = "../qb-ext" }
 qbi-local = { path = "../qbi-local" }
-qbi-socket = { path = "../qbi-socket" }
+qbi-tcp = { path = "../qbi-tcp" }

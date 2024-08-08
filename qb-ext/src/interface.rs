@@ -175,7 +175,8 @@ pub trait QBIContext: Send + Sync {
 }
 
 /// TODO: doc
+/// this has to be done in a task, otherwise it won't work
 pub trait QBISetup<T: QBIContext> {
     /// Setup this kind of QBI.
-    fn setup(self) -> impl Future<Output = T> + Send;
+    fn setup(self) -> impl Future<Output = T> + Send + 'static;
 }

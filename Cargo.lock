@@ -1017,7 +1017,7 @@ dependencies = [
  "qb-ext",
  "qb-proto",
  "qbi-local",
- "qbi-socket",
+ "qbi-tcp",
  "thiserror",
  "tokio",
  "tracing",
@@ -1071,7 +1071,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "qbi-socket"
+name = "qbi-tcp"
 version = "0.1.0"
 dependencies = [
  "bitcode",
@@ -1081,11 +1081,13 @@ dependencies = [
  "rcgen",
  "rustls",
  "rustls-cert-gen",
+ "rustls-pemfile",
  "serde",
  "serde_bytes",
  "tokio",
  "tokio-rustls",
  "tracing",
+ "webpki-roots",
 ]
 
 [[package]]
@@ -1260,6 +1262,16 @@ dependencies = [
  "rand",
  "rcgen",
  "ring",
+ "rustls-pki-types",
+]
+
+[[package]]
+name = "rustls-pemfile"
+version = "2.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "196fe16b00e106300d3e45ecfcb764fa292a535d7326a29a5875c579c7417425"
+dependencies = [
+ "base64",
  "rustls-pki-types",
 ]
 
@@ -1671,6 +1683,15 @@ name = "wasi"
 version = "0.11.0+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
+
+[[package]]
+name = "webpki-roots"
+version = "0.26.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bd7c23921eeb1713a4e851530e9b9756e4fb0e89978582942612524cf09f01cd"
+dependencies = [
+ "rustls-pki-types",
+]
 
 [[package]]
 name = "which"
