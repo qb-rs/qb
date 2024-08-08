@@ -1,6 +1,6 @@
 // TODO: rustls TLS impl for preventing MITM attacks
 
-use std::net::SocketAddr;
+use std::{net::SocketAddr, sync::Arc};
 
 use bitcode::{Decode, Encode};
 use qb_core::common::QBDeviceId;
@@ -9,8 +9,10 @@ use qb_ext::{
     interface::{QBIChannel, QBIContext, QBIHostMessage, QBIMessage, QBISetup, QBISlaveMessage},
 };
 use qb_proto::QBP;
+use rustls::{pki_types::ServerName, ClientConfig, RootCertStore, ServerConfig};
 use serde::{Deserialize, Serialize};
 use tokio::net::{TcpListener, TcpSocket, TcpStream};
+use tokio_rustls::{TlsAcceptor, TlsConnector, TlsStream};
 use tracing::{error, info, warn};
 
 /// A hook which listens for incoming connections and yields
@@ -49,12 +51,20 @@ impl QBHServerSocket {
 
 impl QBHContext<QBIServerSocket> for QBHServerSocket {
     async fn run(self, init: QBHInit<QBIServerSocket>) {
+        let root_cert_store = RootCertStore::empty();
+        // TODO: add root certificate
+        let config = ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(todo!(), todo!())
+            .unwrap();
+
         loop {
             // listen on incoming connections
             let (stream, addr) = self.listener.accept().await.unwrap();
             info!("connected: {}", addr);
             // yield a [QBIServerSocket]
             init.attach(QBIServerSocket {
+                config,
                 stream,
                 auth: self.auth.clone(),
             })
@@ -77,7 +87,17 @@ impl QBIContext for QBIClientSocket {
 
         let socket = TcpSocket::new_v4().unwrap();
         let addr = self.addr.parse().unwrap();
-        let mut stream = socket.connect(addr).await.unwrap();
+        let stream = socket.connect(addr).await.unwrap();
+
+        let root_cert_store = RootCertStore::empty();
+        // TODO: add root certificate
+        let config = ClientConfig::builder()
+            .with_root_certificates(root_cert_store)
+            .with_no_client_auth();
+        let connector = TlsConnector::from(Arc::new(config));
+        let dnsname = ServerName::try_from("quixbyte.application").unwrap();
+        let mut stream = connector.connect(dnsname, stream).await.unwrap();
+
         let mut protocol = QBP::default();
         protocol.negotiate(&mut stream).await.unwrap();
         protocol
@@ -90,7 +110,7 @@ impl QBIContext for QBIClientSocket {
         let runner = Runner {
             host_id,
             com,
-            stream,
+            stream: TlsStream::Client(stream),
             protocol,
         };
 
@@ -107,13 +127,18 @@ impl<'a> QBISetup<'a> for QBIClientSocket {
 #[derive(Debug)]
 pub struct QBIServerSocket {
     pub stream: TcpStream,
+    pub config: ServerConfig,
     /// An authentication token sent on boot
     pub auth: Vec<u8>,
 }
 
 impl QBIContext for QBIServerSocket {
     async fn run(self, host_id: QBDeviceId, com: QBIChannel) {
-        let mut stream = self.stream;
+        let stream = self.stream;
+
+        let acceptor = TlsAcceptor::from(Arc::new(self.config));
+        let mut stream = acceptor.accept(stream).await.unwrap();
+
         let mut protocol = QBP::default();
         protocol.negotiate(&mut stream).await.unwrap();
         let auth = protocol.recv_payload(&mut stream).await.unwrap();
@@ -125,7 +150,7 @@ impl QBIContext for QBIServerSocket {
         let runner = Runner {
             host_id,
             com,
-            stream,
+            stream: TlsStream::Server(stream),
             protocol,
         };
 
@@ -136,7 +161,7 @@ impl QBIContext for QBIServerSocket {
 struct Runner {
     host_id: QBDeviceId,
     com: QBIChannel,
-    stream: TcpStream,
+    stream: TlsStream<TcpStream>,
     protocol: QBP,
 }
 
