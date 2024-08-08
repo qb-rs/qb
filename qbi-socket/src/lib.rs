@@ -19,6 +19,7 @@ use tracing::{error, info, warn};
 /// a [QBIServerSocket].
 pub struct QBHServerSocket {
     pub listener: TcpListener,
+    pub certified_key: rcgen::CertifiedKey,
     /// An authentication token sent on boot
     pub auth: Vec<u8>,
 }
@@ -45,17 +46,30 @@ impl QBHServerSocket {
             port += 1;
         }
 
-        QBHServerSocket { auth, listener }
+        info!("generating certificate...");
+        let subject_alt_names = vec!["quixbyte.application".to_string()];
+        let certified_key = rcgen::generate_simple_self_signed(subject_alt_names).unwrap();
+
+        QBHServerSocket {
+            auth,
+            listener,
+            certified_key,
+        }
     }
 }
 
 impl QBHContext<QBIServerSocket> for QBHServerSocket {
     async fn run(self, init: QBHInit<QBIServerSocket>) {
-        let root_cert_store = RootCertStore::empty();
-        // TODO: add root certificate
         let config = ServerConfig::builder()
             .with_no_client_auth()
-            .with_single_cert(todo!(), todo!())
+            .with_single_cert(
+                vec![self.certified_key.cert.der().clone()],
+                self.certified_key
+                    .key_pair
+                    .serialize_der()
+                    .try_into()
+                    .unwrap(),
+            )
             .unwrap();
 
         loop {
@@ -64,7 +78,7 @@ impl QBHContext<QBIServerSocket> for QBHServerSocket {
             info!("connected: {}", addr);
             // yield a [QBIServerSocket]
             init.attach(QBIServerSocket {
-                config,
+                config: config.clone(),
                 stream,
                 auth: self.auth.clone(),
             })
@@ -92,6 +106,8 @@ impl QBIContext for QBIClientSocket {
         let root_cert_store = RootCertStore::empty();
         // TODO: add root certificate
         let config = ClientConfig::builder()
+            .dangerous()
+            .with_custom_certificate_verifier(verifier)
             .with_root_certificates(root_cert_store)
             .with_no_client_auth();
         let connector = TlsConnector::from(Arc::new(config));
@@ -118,8 +134,14 @@ impl QBIContext for QBIClientSocket {
     }
 }
 
-impl<'a> QBISetup<'a> for QBIClientSocket {
-    async fn setup(self) {
+#[derive(Encode, Decode, Serialize, Deserialize, Debug)]
+struct QBIClientSocketSetup {
+    // TODO:
+}
+
+impl QBISetup<QBIClientSocket> for QBIClientSocketSetup {
+    async fn setup(self) -> QBIClientSocket {
+
         // nothing to do here
     }
 }

@@ -175,7 +175,9 @@ pub trait QBIContext: Send + Sync {
 }
 
 /// TODO: doc
-pub trait QBISetup<'a>: Encode + Decode<'a> + Serialize + Deserialize<'a> {
+pub trait QBISetup<T: QBIContext>:
+    Encode + for<'a> Decode<'a> + Serialize + for<'a> Deserialize<'a>
+{
     /// Setup this kind of QBI.
-    fn setup(self) -> impl Future<Output = ()> + Send;
+    fn setup(self) -> impl Future<Output = T> + Send;
 }
