@@ -5,7 +5,12 @@
 //! requests sent by those. It manages the [master].
 
 use qb_core::{common::qbpaths::INTERNAL_CONFIG, fs::wrapper::QBFSWrapper};
-use std::{collections::HashMap, future::Future, pin::Pin, time::Duration};
+use std::{
+    collections::{HashMap, HashSet},
+    future::Future,
+    pin::Pin,
+    time::Duration,
+};
 use tokio::{sync::mpsc, task::JoinSet};
 
 use bitcode::{Decode, Encode};
@@ -59,6 +64,14 @@ pub type QBIStartFn = Box<
 /// Function pointer to a function which sets up an interface.
 pub type QBISetupFn = Box<dyn Fn(&mut JoinSet<Result<QBIDescriptior>>, String, QBPBlob)>;
 
+/// A struct which can be stored persistently that describes how to
+/// start a specific interface using its kind's name and a data payload.
+#[derive(Encode, Decode)]
+pub struct QBIDescriptior {
+    name: String,
+    data: Vec<u8>,
+}
+
 /// A handle to a task processing a QBP stream for controlling the daemon.
 pub struct QBCHandle {
     tx: mpsc::Sender<QBCResponse>,
@@ -81,19 +94,11 @@ struct HandleInit {
     rx: mpsc::Receiver<QBCResponse>,
 }
 
-/// A struct which can be stored persistently that describes how to
-/// start a specific interface using its kind's name and a data payload.
-#[derive(Encode, Decode)]
-pub struct QBIDescriptior {
-    name: String,
-    data: Vec<u8>,
-}
-
 /// A struct which can be stored persistently to configure a daemon.
 #[derive(Encode, Decode, Default)]
 pub struct QBDaemonConfig {
     qbi_table: HashMap<QBIId, QBIDescriptior>,
-    autostart: Vec<QBIId>,
+    autostart: HashSet<QBIId>,
 }
 
 impl QBDaemonConfig {
@@ -173,9 +178,9 @@ impl QBDaemon {
     /// Start all available interfaces
     pub async fn autostart(&mut self) {
         // autostart
-        let ids = self.config.qbi_table.keys().cloned().collect::<Vec<_>>();
+        let ids = self.config.autostart.iter().cloned().collect::<Vec<_>>();
         for id in ids {
-            self.start(id.clone()).await.unwrap();
+            self.start(id).await.unwrap();
         }
     }
 
@@ -198,6 +203,7 @@ impl QBDaemon {
 
     /// Start an interface by the given id.
     pub async fn start(&mut self, id: QBIId) -> Result<()> {
+        self.config.autostart.insert(id.clone());
         let descriptor = self.config.get(&id)?;
         let name = &descriptor.name;
         let start = self.start_fns.get(name).ok_or(Error::NotSupported)?;
@@ -207,14 +213,26 @@ impl QBDaemon {
 
     /// Stop an interface by the given id.
     pub async fn stop(&mut self, id: QBIId) -> Result<()> {
+        self.config.autostart.remove(&id);
         self.master.detach(&id).await?.await?;
         Ok(())
     }
 
-    /// Setup an interface.
-    pub fn setup(&mut self, name: String, blob: QBPBlob) -> Result<()> {
+    /// Add an interface.
+    pub fn add(&mut self, name: String, blob: QBPBlob) -> Result<()> {
         let setup = self.setup_fns.get(&name).ok_or(Error::NotSupported)?;
         setup(&mut self.setup.join_set, name, blob);
+        Ok(())
+    }
+
+    /// Remove an interface
+    pub async fn remove(&mut self, id: &QBIId) -> Result<()> {
+        self.config.autostart.remove(&id);
+        if self.master.is_attached(&id) {
+            self.master.detach(&id).await?.await?
+        }
+        self.config.qbi_table.remove(&id);
+        self.save().await;
         Ok(())
     }
 
@@ -285,16 +303,8 @@ impl QBDaemon {
         match msg {
             QBCRequest::Start { id } => self.start(id).await?,
             QBCRequest::Stop { id } => self.stop(id).await?,
-            QBCRequest::Add { name, blob } => {
-                self.setup(name, blob)?;
-            }
-            QBCRequest::Remove { id } => {
-                if self.master.is_attached(&id) {
-                    self.master.detach(&id).await.unwrap().await.unwrap()
-                }
-                self.config.qbi_table.remove(&id);
-                self.save().await;
-            }
+            QBCRequest::Add { name, blob } => self.add(name, blob)?,
+            QBCRequest::Remove { id } => self.remove(&id).await?,
             QBCRequest::List => {
                 let handle = self.handles.get(&caller).unwrap();
                 handle.send(QBCResponse::List { list: self.list() }).await;
