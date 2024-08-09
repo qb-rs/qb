@@ -21,7 +21,7 @@ use qb_ext::{
 };
 use qb_proto::{QBPBlob, QBPDeserialize, QBP};
 use thiserror::Error;
-use tracing::{info_span, trace, warn, Instrument};
+use tracing::{info, info_span, trace, warn, Instrument};
 
 use crate::master::QBMaster;
 
@@ -62,7 +62,7 @@ pub type QBIStartFn = Box<
     ) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>>,
 >;
 /// Function pointer to a function which sets up an interface.
-pub type QBISetupFn = Box<dyn Fn(&mut JoinSet<Result<QBIDescriptior>>, String, QBPBlob)>;
+pub type QBISetupFn = Box<dyn Fn(&mut SetupQueue, QBCId, String, QBPBlob)>;
 
 /// A struct which can be stored persistently that describes how to
 /// start a specific interface using its kind's name and a data payload.
@@ -118,17 +118,16 @@ impl QBDaemonConfig {
 
 /// TODO: doc
 #[derive(Default)]
-pub struct Setup {
-    join_set: JoinSet<Result<QBIDescriptior>>,
+pub struct SetupQueue {
+    join_set: JoinSet<(QBCId, Result<QBIDescriptior>)>,
 }
 
-impl Setup {
+impl SetupQueue {
     /// TODO: doc
-    pub async fn join(&mut self) -> QBIDescriptior {
+    pub async fn join(&mut self) -> (QBCId, Result<QBIDescriptior>) {
         loop {
             match self.join_set.join_next().await {
-                Some(Ok(Ok(val))) => return val,
-                Some(Ok(Err(err))) => warn!("setup error: {}", err),
+                Some(Ok(val)) => return val,
                 None => tokio::time::sleep(Duration::from_secs(1)).await,
                 Some(Err(_)) => {}
             }
@@ -149,7 +148,7 @@ pub struct QBDaemon {
     wrapper: QBFSWrapper,
 
     /// TODO: doc
-    pub setup: Setup,
+    pub setup: SetupQueue,
 
     req_tx: mpsc::Sender<(QBCId, QBCRequest)>,
     /// A channel for receiving messages from controlling tasks
@@ -184,13 +183,25 @@ impl QBDaemon {
         }
     }
 
-    /// TODO: doc
-    pub async fn process_setup(&mut self, descriptor: QBIDescriptior) -> Result<()> {
-        let id = QBIId::generate();
-        self.config.qbi_table.insert(id.clone(), descriptor);
-        self.save().await;
-        self.start(id).await?;
-        Ok(())
+    /// Process the result of the setup queue.
+    pub async fn process_setup(&mut self, (id, maybe_setup): (QBCId, Result<QBIDescriptior>)) {
+        match maybe_setup {
+            Ok(val) => {
+                // success: add the descriptor to this daemon
+                self.add_already_setup(val).await.unwrap();
+                let handle = self.handles.get(&id).unwrap();
+                handle.send(QBCResponse::Success).await;
+            }
+            Err(err) => {
+                // error: forward error to the QBCHandle which issued setup
+                let handle = self.handles.get(&id).unwrap();
+                handle
+                    .send(QBCResponse::Error {
+                        msg: err.to_string(),
+                    })
+                    .await;
+            }
+        }
     }
 
     /// Save daemon files
@@ -204,6 +215,7 @@ impl QBDaemon {
     /// Start an interface by the given id.
     pub async fn start(&mut self, id: QBIId) -> Result<()> {
         self.config.autostart.insert(id.clone());
+        self.save().await;
         let descriptor = self.config.get(&id)?;
         let name = &descriptor.name;
         let start = self.start_fns.get(name).ok_or(Error::NotSupported)?;
@@ -214,14 +226,24 @@ impl QBDaemon {
     /// Stop an interface by the given id.
     pub async fn stop(&mut self, id: QBIId) -> Result<()> {
         self.config.autostart.remove(&id);
+        self.save().await;
         self.master.detach(&id).await?.await?;
         Ok(())
     }
 
     /// Add an interface.
-    pub fn add(&mut self, name: String, blob: QBPBlob) -> Result<()> {
+    pub fn add(&mut self, caller: QBCId, name: String, blob: QBPBlob) -> Result<()> {
         let setup = self.setup_fns.get(&name).ok_or(Error::NotSupported)?;
-        setup(&mut self.setup.join_set, name, blob);
+        setup(&mut self.setup, caller, name, blob);
+        Ok(())
+    }
+
+    /// Add an interface that has already been setup.
+    pub async fn add_already_setup(&mut self, descriptor: QBIDescriptior) -> Result<()> {
+        let id = QBIId::generate();
+        self.config.insert(id.clone(), descriptor);
+        self.save().await;
+        self.start(id).await?;
         Ok(())
     }
 
@@ -269,13 +291,17 @@ impl QBDaemon {
         );
         self.setup_fns.insert(
             name,
-            Box::new(move |join_set, name, blob| {
-                join_set.spawn(async move {
-                    let span = info_span!("qbi-setup", name);
-                    let setup = blob.deserialize::<S>()?;
-                    let cx = setup.setup().instrument(span).await;
-                    let data = bitcode::encode(&cx);
-                    Ok(QBIDescriptior { name, data })
+            Box::new(move |setup, caller, name, blob| {
+                setup.join_set.spawn(async move {
+                    let maybe_setup: Result<QBIDescriptior> = async move {
+                        let span = info_span!("qbi-setup", name);
+                        let setup = blob.deserialize::<S>()?;
+                        let cx = setup.setup().instrument(span).await;
+                        let data = bitcode::encode(&cx);
+                        Ok(QBIDescriptior { name, data })
+                    }
+                    .await;
+                    (caller, maybe_setup)
                 });
             }),
         );
@@ -303,7 +329,10 @@ impl QBDaemon {
         match msg {
             QBCRequest::Start { id } => self.start(id).await?,
             QBCRequest::Stop { id } => self.stop(id).await?,
-            QBCRequest::Add { name, blob } => self.add(name, blob)?,
+            QBCRequest::Add { name, blob } => {
+                self.add(caller, name, blob)?;
+                return Ok(false);
+            }
             QBCRequest::Remove { id } => self.remove(&id).await?,
             QBCRequest::List => {
                 let handle = self.handles.get(&caller).unwrap();
@@ -336,7 +365,7 @@ async fn handle_run(mut init: HandleInit) {
     let span = info_span!("handle", id = init.id.to_hex());
 
     match _handle_run(&mut init).instrument(span.clone()).await {
-        Err(err) => span.in_scope(|| warn!("handle finished with error: {:?}", err)),
+        Err(err) => span.in_scope(|| info!("handle finished with: {:?}", err)),
         Ok(_) => {}
     }
 }

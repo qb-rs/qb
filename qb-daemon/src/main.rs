@@ -110,7 +110,7 @@ async fn main() {
                     // process daemon socket
                     Ok(conn) = socket.accept() => daemon.init_handle(conn).await,
                     // process daemon setup queue
-                    v = daemon.setup.join() => daemon.process_setup(v).await.unwrap(),
+                    v = daemon.setup.join() => daemon.process_setup(v).await,
                 }
             }
             None => {
@@ -120,7 +120,7 @@ async fn main() {
                     // process hooks
                     Some(v) = daemon.master.hook_rx.recv() => daemon.master.hprocess(v).await,
                     // process daemon setup queue
-                    v = daemon.setup.join() => daemon.process_setup(v).await.unwrap(),
+                    v = daemon.setup.join() => daemon.process_setup(v).await,
                 }
             }
         }
