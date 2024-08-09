@@ -140,6 +140,9 @@ impl QBChangeMap {
 
     /// Append another changemap to this map.
     pub fn append(&mut self, other: Self) {
+        if other.head > self.head {
+            self.head = other.head;
+        }
         for (resource, mut other_entries) in other.changes.into_iter() {
             let mut entries = self.entries(resource);
             entries.append(&mut other_entries);
@@ -167,13 +170,34 @@ impl QBChangeMap {
         &self.head
     }
 
+    /// Registers the change
+    pub fn register(&mut self, change: &QBChange) -> bool {
+        if change.timestamp > self.head {
+            self.head = change.timestamp.clone();
+            return true;
+        }
+        false
+    }
+
+    /// Push an entry.
+    pub fn push(&mut self, resource: QBResource, change: QBChange) {
+        let new_change = self.register(&change);
+        let entries = self.entries(resource);
+        entries.push(change);
+        if !new_change {
+            Self::_sort(entries);
+        }
+    }
+
     /// Gets the changes for a given resource from this changemap.
+    /// [!] Pushing via this does not update the head nor does it assert sorting.
     #[inline(always)]
-    pub fn entries(&mut self, resource: QBResource) -> &mut Vec<QBChange> {
+    fn entries(&mut self, resource: QBResource) -> &mut Vec<QBChange> {
         self.changes.entry(resource).or_default()
     }
 
     /// Sorts this changemap using each change's timestamp.
+    /// this should not be necessary, changemap should be sorted.
     pub fn sort(&mut self) {
         for entries in self.changes.values_mut() {
             Self::_sort(entries);
@@ -245,6 +269,7 @@ impl QBChangeMap {
                 changes.extend(&mut rchanges.into_iter().map(|e| (resource.clone(), e)));
 
                 *entries = Self::_merge(remote_entries, &mut entries);
+                // TODO: update head
             } else {
                 changes.extend(
                     remote_entries
@@ -252,7 +277,10 @@ impl QBChangeMap {
                         .cloned()
                         .map(|e| (resource.clone(), e)),
                 );
-                self.entries(resource).append(&mut remote_entries);
+                self.register(remote_entries.last().unwrap());
+                let entries = self.entries(resource);
+                entries.append(&mut remote_entries);
+                Self::_sort(entries);
             }
         }
 

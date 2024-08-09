@@ -6,9 +6,9 @@ use bitcode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::{
     fmt,
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
-use time::{macros::format_description, OffsetDateTime};
+use time::macros::format_description;
 
 use crate::device::QBDeviceId;
 
@@ -20,9 +20,9 @@ pub struct QBTimeStamp(u64);
 
 impl fmt::Display for QBTimeStamp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let datetime = OffsetDateTime::from_unix_timestamp(self.0 as i64).unwrap();
+        let utc = time::OffsetDateTime::UNIX_EPOCH + Duration::from_millis(self.0);
         let ft = format_description!("[day]-[month repr:short]-[year] [hour]:[minute]:[second]");
-        write!(f, "{}", datetime.format(ft).unwrap())
+        write!(f, "{}", utc.format(ft).unwrap())
     }
 }
 

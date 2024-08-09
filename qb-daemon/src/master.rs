@@ -235,6 +235,7 @@ impl QBMaster {
 
                 // find the new common hash
                 let new_common = self.changemap.head().clone();
+                debug!("new common: {}", new_common);
                 self.devices.set_common(&device_id, new_common);
 
                 // Send sync to remote

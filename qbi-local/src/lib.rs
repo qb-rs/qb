@@ -84,7 +84,7 @@ impl Runner {
             } => {
                 assert!(self.fs.devices.get_common(&self.host_id).clone() == common);
 
-                let local = self.fs.changelog.since(&common);
+                let local = self.fs.changemap.since(&common);
 
                 // Apply changes
                 //self.watcher_skip.append(
@@ -96,7 +96,7 @@ impl Runner {
 
                 let mut changemap = local.clone();
                 let changes = changemap.merge(remote).unwrap();
-                self.fs.changelog.append(changemap);
+                self.fs.changemap.append(changemap);
 
                 //self.fs.changelog.append(&mut entries);
 
@@ -104,7 +104,7 @@ impl Runner {
                 //let fschanges = self.fs.table.to_fschanges(fschanges);
                 //self.fs.apply_changes(fschanges).await.unwrap();
 
-                let new_common = self.fs.changelog.head().clone();
+                let new_common = self.fs.changemap.head().clone();
                 self.fs.devices.set_common(&self.host_id, new_common);
 
                 // Send sync to remote
@@ -179,15 +179,11 @@ impl Runner {
             _ => panic!("this should not happen"),
         };
 
-        // tree needs to be updated continously
-        let fschange = self.fs.table.to_fschange(change.clone());
-        self.fs.tree.notify_change(&fschange);
-
-        self.fs.changelog.entries(resource).push(change);
+        self.fs.changemap.push(resource, change);
     }
 
     fn should_sync(&mut self) -> bool {
-        !self.syncing && self.fs.changelog.head() != self.fs.devices.get_common(&self.host_id)
+        !self.syncing && self.fs.changemap.head() != self.fs.devices.get_common(&self.host_id)
     }
 
     async fn sync(&mut self) {
@@ -197,7 +193,8 @@ impl Runner {
 
         // Complete transaction
         let common = self.fs.devices.get_common(&self.host_id).clone();
-        let changes = self.fs.changelog.since_cloned(&common);
+        let mut changes = self.fs.changemap.since_cloned(&common);
+        changes.minify();
 
         // save the changes applied
         self.fs.save().await.unwrap();

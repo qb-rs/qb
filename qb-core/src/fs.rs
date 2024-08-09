@@ -66,8 +66,8 @@ pub struct QBFS {
     pub tree: QBFileTree,
     /// the file table
     pub table: QBFileTable,
-    /// the changelog
-    pub changelog: QBChangeMap,
+    /// the changemap
+    pub changemap: QBChangeMap,
     /// the devices
     pub devices: QBDeviceTable,
     /// the ignore builder
@@ -96,7 +96,7 @@ impl QBFS {
             tree,
             table,
             devices,
-            changelog,
+            changemap: changelog,
             ignore_builder,
             ignore,
         }
@@ -182,9 +182,9 @@ impl QBFS {
 
         let file = self
             .tree
-            .get_or_insert(&path, TreeFile::default().into())
+            .get_or_insert_mut(&path, TreeFile::default().into())
             .unwrap()
-            .file();
+            .file_mut();
 
         // no changes, nothing to do
         if file.hash == hash {
@@ -195,6 +195,8 @@ impl QBFS {
             Ok(new) => {
                 let new = new.to_string();
                 let old = self.table.get(&file.hash).to_string();
+                self.table.insert_hash(hash.clone(), new.clone());
+                file.hash = hash;
 
                 Ok(Some(QBFileDiff::Text(QBDiff::compute(old, new))))
             }
@@ -205,7 +207,7 @@ impl QBFS {
     /// Save changelog to file system.
     pub async fn save_changelog(&self) -> QBFSResult<()> {
         self.wrapper
-            .save(qbpaths::INTERNAL_CHANGEMAP.as_ref(), &self.changelog)
+            .save(qbpaths::INTERNAL_CHANGEMAP.as_ref(), &self.changemap)
             .await
     }
 
