@@ -7,7 +7,7 @@ use notify::{
     Event, EventKind, RecursiveMode, Watcher,
 };
 use qb_core::{
-    change::{QBChange, QBChangeKind},
+    change::{QBChange, QBChangeKind, QBChangeMap},
     device::QBDeviceId,
     fs::{QBFileDiff, QBFS},
     time::QBTimeStampRecorder,
@@ -78,21 +78,25 @@ impl Runner {
                 self.fs.devices.set_common(&self.host_id, common);
                 self.fs.save_devices().await.unwrap();
             }
-            QBIMessage::Sync { common, .. } => {
+            QBIMessage::Sync {
+                common,
+                changes: remote,
+            } => {
                 assert!(self.fs.devices.get_common(&self.host_id).clone() == common);
 
-                let local_entries = self.fs.changelog.since(&common);
+                let local = self.fs.changelog.since(&common);
 
                 // Apply changes
-                // TODO: rewrite merging code
-                //let (mut entries, fschanges) =
-                //    QBChangelog::merge(local_entries.clone(), changes).unwrap();
                 //self.watcher_skip.append(
                 //    &mut fschanges
                 //        .iter()
                 //        .map(|e| self.fs.wrapper.fspath(&e.resource))
                 //        .collect(),
                 //);
+
+                let mut changemap = local.clone();
+                let changes = changemap.merge(remote).unwrap();
+                self.fs.changelog.append(changemap);
 
                 //self.fs.changelog.append(&mut entries);
 
@@ -108,7 +112,7 @@ impl Runner {
                     self.com
                         .send(QBIMessage::Sync {
                             common,
-                            changes: local_entries,
+                            changes: local,
                         })
                         .await;
                 }

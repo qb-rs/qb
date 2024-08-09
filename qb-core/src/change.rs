@@ -65,10 +65,19 @@ pub enum QBChangeKind {
 
 impl QBChangeKind {
     /// Returns whether this change has external changes that rely on it.
-    #[inline]
+    #[inline(always)]
     pub fn is_external(&self) -> bool {
         match self {
             QBChangeKind::CopyFrom | QBChangeKind::RenameFrom => true,
+            _ => false,
+        }
+    }
+
+    /// Returns whether this change removes the resource.
+    #[inline(always)]
+    pub fn is_subtractive(&self) -> bool {
+        match self {
+            QBChangeKind::Delete | QBChangeKind::RenameFrom => true,
             _ => false,
         }
     }
@@ -126,6 +135,15 @@ impl QBChangeMap {
         QBChangeMap {
             changes,
             head: self.head.clone(),
+        }
+    }
+
+    /// Append another changemap to this map.
+    pub fn append(&mut self, other: Self) {
+        for (resource, mut other_entries) in other.changes.into_iter() {
+            let mut entries = self.entries(resource);
+            entries.append(&mut other_entries);
+            Self::_sort(&mut entries);
         }
     }
 
@@ -210,5 +228,50 @@ impl QBChangeMap {
 
             i += 1;
         }
+    }
+
+    // TODO: collision detection
+    // TODO: test whether merge(a, b) == merge(b, a)
+    //
+    /// merge two changelogs and return either a common changelog plus the changes
+    /// required to each individual file system or a vec of merge conflicts.
+    pub fn merge(&mut self, remote: Self) -> Result<Vec<(QBResource, QBChange)>, String> {
+        let mut changes = Vec::new();
+        for (resource, mut remote_entries) in remote.changes.into_iter() {
+            if let Some(mut entries) = self.changes.get_mut(&resource) {
+                // TODO: do this properly
+                let mut rchanges = remote_entries.clone();
+                Self::_minify(&mut rchanges);
+                changes.extend(&mut rchanges.into_iter().map(|e| (resource.clone(), e)));
+
+                *entries = Self::_merge(remote_entries, &mut entries);
+            } else {
+                changes.extend(
+                    remote_entries
+                        .iter()
+                        .cloned()
+                        .map(|e| (resource.clone(), e)),
+                );
+                self.entries(resource).append(&mut remote_entries);
+            }
+        }
+
+        Ok(changes)
+    }
+
+    fn _merge(mut a: Vec<QBChange>, b: &mut Vec<QBChange>) -> Vec<QBChange> {
+        a.append(b);
+        Self::_sort(&mut a);
+        Self::_minify(&mut a);
+
+        let til = a
+            .iter()
+            .rposition(|e| !e.kind.is_subtractive())
+            .unwrap_or(0);
+        a.into_iter()
+            .enumerate()
+            .filter(|(i, e)| i >= &til || !e.kind.is_subtractive())
+            .map(|(_, e)| e)
+            .collect()
     }
 }

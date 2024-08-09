@@ -219,16 +219,19 @@ impl QBMaster {
         let handle_common = self.devices.get_common(&device_id);
 
         match msg {
-            QBIMessage::Sync { common, .. } => {
+            QBIMessage::Sync {
+                common,
+                changes: remote,
+            } => {
                 assert!(handle_common == &common);
 
                 // Find local changes
-                let local_entries = self.changemap.since(&common);
+                let local = self.changemap.since(&common);
 
                 // Apply changes to changelog
-                // TODO: merging
-                //let (mut entries, _) = QBChangelog::merge(local_entries.clone(), changes).unwrap();
-                //self.changemap.append(&mut entries);
+                let mut changemap = local.clone();
+                _ = changemap.merge(remote).unwrap();
+                self.changemap.append(changemap);
 
                 // find the new common hash
                 let new_common = self.changemap.head().clone();
@@ -238,7 +241,7 @@ impl QBMaster {
                 if !*syncing {
                     let msg = QBIMessage::Sync {
                         common,
-                        changes: local_entries,
+                        changes: local,
                     }
                     .into();
                     handle.tx.send(msg).await.unwrap();
