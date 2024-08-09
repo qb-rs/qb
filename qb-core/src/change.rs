@@ -1,119 +1,119 @@
-//! This module is responsible for everything that
-//! has to do with tracking changes. That is for example
-//! the [QBChange] structs themselves.
-//!
-//! TODO: need to work hard on this one
-
-pub mod log;
-pub mod map;
-pub mod transaction;
-
-use core::fmt;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::collections::HashMap;
 
 use bitcode::{Decode, Encode};
-use lazy_static::lazy_static;
 use serde::{Deserialize, Serialize};
-use time::macros::format_description;
 
-use crate::common::{
-    diff::QBDiff,
-    hash::QBHash,
-    resource::{qbpaths, QBResource},
-};
+use crate::{diff::QBDiff, path::QBResource, time::QBTimeStampUnique};
 
-lazy_static! {
-    /// This is the base entry that comes first at every changelog
-    pub static ref QB_CHANGELOG_BASE: QBChange =
-        QBChange::new(0, QBChangeKind::Create, qbpaths::ROOT.clone().dir());
-}
-
-/// This struct describes a change that has been done.
-#[derive(Encode, Decode, Serialize, Deserialize, Clone, Debug)]
+/// This struct represents a change applied to some file.
+#[derive(Encode, Decode, Serialize, Deserialize, Debug)]
 pub struct QBChange {
-    hash: QBHash,
-    /// a unix timestamp describing when the change has been committed
-    pub timestamp: u64,
-    /// the kind of change
-    pub kind: QBChangeKind,
-    /// the resource this change affects
-    pub resource: QBResource,
+    timestamp: QBTimeStampUnique,
+    kind: QBChangeKind,
 }
 
-impl fmt::Display for QBChange {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let utc = time::OffsetDateTime::UNIX_EPOCH + Duration::from_millis(self.timestamp);
-        let ft = format_description!("[day]-[month repr:short]-[year] [hour]:[minute]:[second]");
-
-        write!(
-            f,
-            "{} {} {:?} {}",
-            self.hash,
-            utc.format(ft).unwrap(),
-            self.kind,
-            self.resource
-        )
-    }
-}
-
-impl QBChange {
-    /// Create a new change.
-    pub fn new(timestamp: u64, kind: QBChangeKind, resource: QBResource) -> Self {
-        let mut ret = Self {
-            hash: Default::default(),
-            timestamp,
-            kind,
-            resource,
-        };
-
-        // TODO: figure out whether it makes sense to store the hash of each commit
-        let binary = bitcode::encode(&ret);
-        QBHash::compute_mut(&mut ret.hash, binary);
-
-        ret
-    }
-
-    /// Create a new change with the current system time.
-    #[inline]
-    pub fn now(kind: QBChangeKind, resource: QBResource) -> Self {
-        let ts = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
-
-        Self::new(ts, kind, resource)
-    }
-
-    /// return the hash of this change
-    #[inline]
-    pub fn hash(&self) -> &QBHash {
-        &self.hash
-    }
-}
-
-/// an enum describing the different kinds of changes
-#[derive(Encode, Decode, Serialize, Deserialize, Clone, Debug)]
+#[derive(Encode, Decode, Serialize, Deserialize, Debug)]
 pub enum QBChangeKind {
-    /// change a binary file
-    UpdateBinary {
-        /// the file's new contents
-        contents: Vec<u8>,
-    },
-    /// change a text file
-    UpdateText {
-        /// a diff that when applied yields the new contents
-        diff: QBDiff,
-    },
-    /// create a file or directory
+    /// Create resource
     Create,
-    /// delete a file or directory
+    /// Delete resource
     Delete,
+    /// Update file contents (text)
+    UpdateText(QBDiff),
+    /// Update file contents (binary)
+    #[serde(with = "serde_bytes")]
+    UpdateBinary(Vec<u8>),
+    /// Rename resource (destination)
+    /// This change should have the same timestamp as the
+    /// corresponding RenameFrom entry.
+    RenameTo,
+    /// Rename resource (source)
+    /// This change should have the same timestamp as the
+    /// corresponding RenameTo entry.
+    RenameFrom,
+    /// Copy resource (destination)
+    /// This change should have the same timestamp as the
+    /// corresponding CopyFrom entry.
+    CopyTo,
+    /// Copy resource (source)
+    /// This change should have the same timestamp as the
+    /// corresponding CopyTo entries.
+    CopyFrom,
 }
 
 impl QBChangeKind {
-    /// currently unimplemented, will be interessting once move and copy are here again
-    pub fn external(&self) -> bool {
-        // TODO: add when move is here again
-        false
+    /// Returns whether this change has external changes that rely on it.
+    #[inline]
+    pub fn is_external(&self) -> bool {
+        match self {
+            QBChangeKind::CopyFrom | QBChangeKind::RenameFrom => true,
+            _ => false,
+        }
+    }
+}
+
+/// This struct is a map which stores a collection of changes for each resource.
+#[derive(Encode, Decode, Serialize, Deserialize, Debug, Default)]
+pub struct QBChangeMap {
+    changes: HashMap<QBResource, Vec<QBChange>>,
+}
+
+impl QBChangeMap {
+    /// Gets the changes for a given resource from this changemap.
+    #[inline]
+    pub fn entries(&mut self, resource: QBResource) -> &mut Vec<QBChange> {
+        self.changes.entry(resource).or_default()
+    }
+
+    /// Sorts this changemap using each change's timestamp.
+    pub fn sort(&mut self) {
+        for entries in self.changes.values_mut() {
+            Self::_sort(entries);
+        }
+    }
+
+    #[inline]
+    fn _sort(entries: &mut [QBChange]) {
+        entries.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+    }
+
+    /// Minifies this changemap.
+    pub fn minify(&mut self) {
+        for entries in self.changes.values_mut() {
+            Self::_sort(entries);
+            Self::_minify(entries);
+        }
+    }
+
+    #[inline]
+    fn _minify(entries: &mut Vec<QBChange>) {
+        let mut remove_until = 0;
+
+        let mut i = 0;
+        while i < entries.len() {
+            match &entries[i].kind {
+                // TODO: collapse diffs
+                kind if kind.is_external() => remove_until = i + 1,
+                QBChangeKind::Create => remove_until = i + 1,
+                QBChangeKind::Delete => {
+                    // remove unused, logged changes
+                    i -= entries.drain(remove_until..i).len();
+
+                    // remove direct create => delete chainsa
+                    if i != 0 && matches!(entries[i - 1].kind, QBChangeKind::Create) {
+                        debug_assert_eq!(entries.drain((i - 1)..(i + 1)).len(), 2);
+                        i -= 1;
+                    } else {
+                        i += 1;
+                    }
+
+                    continue;
+                }
+                // TODO: collapse diffs using file table
+                _ => {}
+            }
+
+            i += 1;
+        }
     }
 }

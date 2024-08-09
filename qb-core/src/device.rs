@@ -30,7 +30,9 @@ use crate::change::QB_CHANGELOG_BASE;
 use super::hash::QBHash;
 
 /// A device identifier.
-#[derive(Encode, Decode, Serialize, Deserialize, Default, Clone, Eq, PartialEq, Hash)]
+#[derive(
+    Encode, Decode, Serialize, Deserialize, Default, Clone, Eq, PartialEq, PartialOrd, Hash,
+)]
 pub struct QBDeviceId(pub(crate) u64);
 
 impl From<&str> for QBDeviceId {

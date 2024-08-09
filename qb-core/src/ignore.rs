@@ -13,7 +13,7 @@ use crate::fs::table::{QBFSChange, QBFSChangeKind, QBFileTable};
 
 use super::{
     hash::QBHash,
-    resource::{qbpaths, QBPath, QBResource},
+    path::{qbpaths, QBPath, QBResource},
 };
 
 /// struct describing an error that occured when dealing with an ignore file

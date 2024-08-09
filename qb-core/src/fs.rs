@@ -17,17 +17,15 @@ use wrapper::QBFSWrapper;
 
 use crate::{
     change::log::QBChangelog,
-    common::{
-        device::QBDeviceTable,
-        diff::QBDiff,
-        hash::QBHash,
-        ignore::{QBIgnoreMap, QBIgnoreMapBuilder},
-        qbpaths::{
-            INTERNAL_CHANGELOG, INTERNAL_DEVICES, INTERNAL_FILETABLE, INTERNAL_FILETREE,
-            INTERNAL_IGNORE,
-        },
-        resource::{qbpaths, QBPath, QBPathError},
+    device::QBDeviceTable,
+    diff::QBDiff,
+    hash::QBHash,
+    ignore::{QBIgnoreMap, QBIgnoreMapBuilder},
+    path::qbpaths::{
+        INTERNAL_CHANGELOG, INTERNAL_DEVICES, INTERNAL_FILETABLE, INTERNAL_FILETREE,
+        INTERNAL_IGNORE,
     },
+    path::{qbpaths, QBPath, QBPathError},
 };
 
 /// struct describing an error that occured while dealing with the file system

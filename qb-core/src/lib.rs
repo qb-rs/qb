@@ -14,5 +14,10 @@
 #![warn(missing_docs)]
 
 pub mod change;
-pub mod common;
+pub mod device;
+pub mod diff;
 pub mod fs;
+pub mod hash;
+pub mod ignore;
+pub mod path;
+pub mod time;
