@@ -1,3 +1,8 @@
+//! # change
+//!
+//! This module provides primitives for working with changes applied
+//! to a filesystem.
+
 use std::collections::HashMap;
 
 use bitcode::{Decode, Encode};
@@ -6,13 +11,16 @@ use serde::{Deserialize, Serialize};
 use crate::{diff::QBDiff, path::QBResource, time::QBTimeStampUnique};
 
 /// This struct represents a change applied to some file.
-#[derive(Encode, Decode, Serialize, Deserialize, Debug)]
+#[derive(Encode, Decode, Serialize, Deserialize, Debug, Clone)]
 pub struct QBChange {
-    timestamp: QBTimeStampUnique,
-    kind: QBChangeKind,
+    /// The timestamp of when this change occured
+    pub timestamp: QBTimeStampUnique,
+    /// The kind of change
+    pub kind: QBChangeKind,
 }
 
-#[derive(Encode, Decode, Serialize, Deserialize, Debug)]
+/// The kind of change.
+#[derive(Encode, Decode, Serialize, Deserialize, Debug, Clone)]
 pub enum QBChangeKind {
     /// Create resource
     Create,
@@ -59,6 +67,28 @@ pub struct QBChangeMap {
 }
 
 impl QBChangeMap {
+    /// Gets the changes since the timestamp.
+    pub fn since_cloned(&self, since: QBTimeStampUnique) -> QBChangeMap {
+        // iterator magic
+        let changes = self
+            .changes
+            .iter()
+            .map(|(resource, entries)| {
+                (
+                    resource.clone(),
+                    entries
+                        .into_iter()
+                        .filter(|e| e.timestamp > since)
+                        .cloned()
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .filter(|(_, entries)| !entries.is_empty())
+            .collect::<HashMap<_, _>>();
+
+        QBChangeMap { changes }
+    }
+
     /// Gets the changes for a given resource from this changemap.
     #[inline]
     pub fn entries(&mut self, resource: QBResource) -> &mut Vec<QBChange> {
@@ -74,6 +104,11 @@ impl QBChangeMap {
 
     #[inline]
     fn _sort(entries: &mut [QBChange]) {
+        entries.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+    }
+
+    #[inline]
+    fn _sort_borrowed(entries: &mut [&QBChange]) {
         entries.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
     }
 

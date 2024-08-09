@@ -9,11 +9,9 @@ use std::collections::HashMap;
 use bitcode::{Decode, Encode};
 
 use crate::{
-    change::{QBChange, QBChangeKind},
-    common::{
-        hash::{QBHash, QB_HASH_EMPTY},
-        resource::QBResource,
-    },
+    change::QBChange,
+    hash::{QBHash, QB_HASH_EMPTY},
+    path::QBResource,
 };
 
 /// struct describing a change that can be directly applied to the file system
@@ -89,7 +87,12 @@ impl QBFileTable {
     }
 
     /// convert the given change to fs change
-    pub fn to_fschange(&mut self, change: QBChange) -> QBFSChange {
+    pub fn to_fschange(&mut self, _change: QBChange) -> QBFSChange {
+        // TODO: refactor this
+
+        todo!()
+
+        /*
         let resource = change.resource;
         let kind = change.kind;
         let kind = match kind {
@@ -115,5 +118,6 @@ impl QBFileTable {
         };
 
         QBFSChange { resource, kind }
+        */
     }
 }

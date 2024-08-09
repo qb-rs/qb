@@ -16,7 +16,7 @@ use tree::{QBFileTree, TreeFile};
 use wrapper::QBFSWrapper;
 
 use crate::{
-    change::log::QBChangelog,
+    change::QBChangeMap,
     device::QBDeviceTable,
     diff::QBDiff,
     hash::QBHash,
@@ -67,7 +67,7 @@ pub struct QBFS {
     /// the file table
     pub table: QBFileTable,
     /// the changelog
-    pub changelog: QBChangelog,
+    pub changelog: QBChangeMap,
     /// the devices
     pub devices: QBDeviceTable,
     /// the ignore builder

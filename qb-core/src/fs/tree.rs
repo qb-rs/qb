@@ -14,10 +14,8 @@ use tracing::warn;
 
 use crate::{
     change::QBChange,
-    common::{
-        hash::QBHash,
-        resource::{qbpaths, QBPath, QBResource},
-    },
+    hash::QBHash,
+    path::{qbpaths, QBPath, QBResource},
 };
 
 use super::{

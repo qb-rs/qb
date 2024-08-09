@@ -25,9 +25,7 @@ use hex::FromHexError;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
 
-use crate::change::QB_CHANGELOG_BASE;
-
-use super::hash::QBHash;
+use crate::time::{QBTimeStampUnique, QB_TIMESTAMP_BASE};
 
 /// A device identifier.
 #[derive(
@@ -87,7 +85,7 @@ impl QBDeviceId {
 pub struct QBDeviceTable {
     /// The id of the device hosting this table
     pub host_id: QBDeviceId,
-    commons: HashMap<QBDeviceId, QBHash>,
+    commons: HashMap<QBDeviceId, QBTimeStampUnique>,
     names: HashMap<QBDeviceId, String>,
 }
 
@@ -103,13 +101,13 @@ impl Default for QBDeviceTable {
 
 impl QBDeviceTable {
     /// Get the common hash of the connection with the id.
-    pub fn get_common(&self, id: &QBDeviceId) -> &QBHash {
-        self.commons.get(id).unwrap_or(QB_CHANGELOG_BASE.hash())
+    pub fn get_common(&self, id: &QBDeviceId) -> &QBTimeStampUnique {
+        self.commons.get(id).unwrap_or(&QB_TIMESTAMP_BASE)
     }
 
     /// Set the common hash of the connection with the id.
-    pub fn set_common(&mut self, id: &QBDeviceId, hash: QBHash) {
-        self.commons.insert(id.clone(), hash);
+    pub fn set_common(&mut self, id: &QBDeviceId, timestamp: QBTimeStampUnique) {
+        self.commons.insert(id.clone(), timestamp);
     }
 
     /// Get the name of the connection with the id.

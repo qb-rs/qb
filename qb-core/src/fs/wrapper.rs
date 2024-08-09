@@ -8,7 +8,7 @@ use std::{
 
 use bitcode::{DecodeOwned, Encode};
 
-use crate::common::resource::{qbpaths, QBPath, QBResource, QBResourceKind};
+use crate::path::{qbpaths, QBPath, QBResource, QBResourceKind};
 
 use super::{QBFSError, QBFSResult};
 

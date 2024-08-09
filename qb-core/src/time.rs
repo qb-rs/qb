@@ -1,3 +1,7 @@
+//! # time
+//!
+//! This module provides primitives for working with time.
+
 use bitcode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -26,7 +30,9 @@ impl fmt::Display for QBTimeStamp {
     Encode, Decode, Serialize, Deserialize, Clone, Default, Debug, Eq, PartialEq, PartialOrd,
 )]
 pub struct QBTimeStampUnique {
+    /// The timestamp
     pub timestamp: QBTimeStamp,
+    /// The device id
     pub device_id: QBDeviceId,
 }
 
@@ -34,6 +40,9 @@ impl Ord for QBTimeStampUnique {
     /// Compare this unique timestamp to another. This should never return
     /// std::cmp::Ordering::Equal for timestamps returned by two seperate invocations
     /// of the [QBTimeStampRecorder::record] method.
+    ///
+    /// This will compare the structs first by their timestamps, and if those
+    /// are equal then by the device_id.
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         match self.timestamp.0.cmp(&other.timestamp.0) {
             std::cmp::Ordering::Equal => self.device_id.0.cmp(&other.device_id.0),
@@ -47,6 +56,12 @@ impl fmt::Display for QBTimeStampUnique {
         write!(f, "{}: {}", self.device_id, self.timestamp)
     }
 }
+
+/// The base timestamp.
+pub const QB_TIMESTAMP_BASE: QBTimeStampUnique = QBTimeStampUnique {
+    timestamp: QBTimeStamp(0),
+    device_id: QBDeviceId(0),
+};
 
 /// A timestamp recorder provides the ability to generate 100% unique timestamps.
 /// There will never be a conflict.
@@ -70,6 +85,7 @@ impl QBTimeStampRecorder {
         }
     }
 
+    /// Record a timestamp.
     pub fn record(&mut self) -> QBTimeStampUnique {
         // TODO: switch to instant for monotonically increasing time
         let ts = SystemTime::now()
