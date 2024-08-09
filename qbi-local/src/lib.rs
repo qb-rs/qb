@@ -1,5 +1,5 @@
 use core::panic;
-use std::{path::PathBuf, time::Duration};
+use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use bitcode::{Decode, Encode};
 use notify::{
@@ -7,9 +7,10 @@ use notify::{
     Event, EventKind, RecursiveMode, Watcher,
 };
 use qb_core::{
-    change::{QBChange, QBChangeKind, QBChangeMap},
+    change::{QBChange, QBChangeKind},
     device::QBDeviceId,
     fs::{QBFileDiff, QBFS},
+    path::{qbpaths::INTERNAL, QBPath},
     time::QBTimeStampRecorder,
 };
 use qb_ext::interface::{QBIChannel, QBIContext, QBIHostMessage, QBIMessage, QBISetup};
@@ -43,6 +44,7 @@ pub struct Runner {
     watcher_skip: Vec<PathBuf>,
     host_id: QBDeviceId,
     recorder: QBTimeStampRecorder,
+    trackers: HashMap<usize, QBPath>,
 }
 
 impl Runner {
@@ -63,6 +65,7 @@ impl Runner {
         Self {
             syncing: false,
             watcher_skip: Vec::new(),
+            trackers: Default::default(),
             host_id,
             fs,
             com,
@@ -129,19 +132,32 @@ impl Runner {
 
     // TODO: filter events caused by apply
     async fn on_watcher(&mut self, event: Event) {
-        debug!("event {:?}", event);
         let fspath = &event.paths[0];
         let path = self.fs.wrapper.parse(fspath).unwrap();
+
+        // skip internal files
+        if INTERNAL.is_parent(&path) {
+            return;
+        }
+
+        debug!("event {:?}", event);
         let resource = match event.kind {
             EventKind::Remove(RemoveKind::Folder) | EventKind::Create(CreateKind::Folder) => {
                 path.dir()
             }
             EventKind::Modify(ModifyKind::Name(RenameMode::From)) => {
-                match self.fs.tree.get(&path).map(|e| e.is_dir()) {
-                    Some(true) => path.dir(),
-                    Some(false) => path.file(),
-                    None => return,
-                }
+                self.trackers.insert(event.tracker().unwrap(), path);
+                return;
+            }
+            EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
+                self.fs.wrapper
+                let tracker = event.tracker().unwrap();
+                println!(
+                    "RENAME: {} -> {}",
+                    self.trackers.remove(&tracker).unwrap(),
+                    path
+                );
+                return;
             }
             EventKind::Create(CreateKind::File)
             | EventKind::Remove(RemoveKind::File)
@@ -172,7 +188,8 @@ impl Runner {
                     None => return,
                 }
             }
-            EventKind::Modify(ModifyKind::Name(RenameMode::From)) | EventKind::Remove(..) => {
+            EventKind::Remove(..) => {
+                info!("DELETE {}", resource);
                 QBChange::new(self.recorder.record(), QBChangeKind::Delete)
             }
             EventKind::Create(..) => QBChange::new(self.recorder.record(), QBChangeKind::Create),
@@ -194,6 +211,7 @@ impl Runner {
         // Complete transaction
         let common = self.fs.devices.get_common(&self.host_id).clone();
         let mut changes = self.fs.changemap.since_cloned(&common);
+        info!("before MINIFY {:?}", changes);
         changes.minify();
 
         // save the changes applied

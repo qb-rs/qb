@@ -33,6 +33,11 @@ impl QBFSWrapper {
         Self { root_str, root }
     }
 
+    pub async fn to_resource(&self, path: QBPath) -> QBFSResult<QBResource> {
+        let meta = tokio::fs::metadata(self.fspath(&path)).await?;
+        Ok(QBResource::new(path, QBResourceKind::from_metadata(meta)))
+    }
+
     /// Make sure the filesystem is properly setup.
     pub async fn init(&self) -> QBFSResult<()> {
         tokio::fs::create_dir_all(self.fspath(qbpaths::INTERNAL.as_ref())).await?;
