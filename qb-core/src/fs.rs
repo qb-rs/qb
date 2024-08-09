@@ -22,7 +22,7 @@ use crate::{
     hash::QBHash,
     ignore::{QBIgnoreMap, QBIgnoreMapBuilder},
     path::qbpaths::{
-        INTERNAL_CHANGELOG, INTERNAL_DEVICES, INTERNAL_FILETABLE, INTERNAL_FILETREE,
+        INTERNAL_CHANGEMAP, INTERNAL_DEVICES, INTERNAL_FILETABLE, INTERNAL_FILETREE,
         INTERNAL_IGNORE,
     },
     path::{qbpaths, QBPath, QBPathError},
@@ -87,7 +87,7 @@ impl QBFS {
         let ignore_builder: QBIgnoreMapBuilder = wrapper.dload(INTERNAL_IGNORE.as_ref()).await;
         let ignore = ignore_builder.build(&table);
         let devices = wrapper.dload(INTERNAL_DEVICES.as_ref()).await;
-        let changelog = wrapper.dload(INTERNAL_CHANGELOG.as_ref()).await;
+        let changelog = wrapper.dload(INTERNAL_CHANGEMAP.as_ref()).await;
 
         println!("loaded {}", ignore);
 
@@ -205,7 +205,7 @@ impl QBFS {
     /// Save changelog to file system.
     pub async fn save_changelog(&self) -> QBFSResult<()> {
         self.wrapper
-            .save(qbpaths::INTERNAL_CHANGELOG.as_ref(), &self.changelog)
+            .save(qbpaths::INTERNAL_CHANGEMAP.as_ref(), &self.changelog)
             .await
     }
 

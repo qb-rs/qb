@@ -8,7 +8,7 @@ use std::{
     fmt,
     time::{SystemTime, UNIX_EPOCH},
 };
-use time::OffsetDateTime;
+use time::{macros::format_description, OffsetDateTime};
 
 use crate::device::QBDeviceId;
 
@@ -21,7 +21,8 @@ pub struct QBTimeStamp(u64);
 impl fmt::Display for QBTimeStamp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let datetime = OffsetDateTime::from_unix_timestamp(self.0 as i64).unwrap();
-        write!(f, "{}", datetime)
+        let ft = format_description!("[day]-[month repr:short]-[year] [hour]:[minute]:[second]");
+        write!(f, "{}", datetime.format(ft).unwrap())
     }
 }
 

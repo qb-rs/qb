@@ -22,10 +22,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::future::Future;
 
-use qb_core::{
-    change::QBChange,
-    common::{device::QBDeviceId, hash::QBHash},
-};
+use qb_core::{change::QBChangeMap, device::QBDeviceId, time::QBTimeStampUnique};
 
 use crate::QBChannel;
 
@@ -89,14 +86,14 @@ pub enum QBIMessage {
     /// change gets updated (synchronization)
     Common {
         /// hash that points to the common change
-        common: QBHash,
+        common: QBTimeStampUnique,
     },
     /// synchronize
     Sync {
         /// the common hash that was used for creating the changes vector
-        common: QBHash,
+        common: QBTimeStampUnique,
         /// a vector describing the changes
-        changes: Vec<QBChange>,
+        changes: QBChangeMap,
     },
     /// An interface might not be properly initialized
     /// at attachment and we might not even know the Id
@@ -111,13 +108,11 @@ pub enum QBIMessage {
 impl fmt::Display for QBIMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self {
-            QBIMessage::Sync {
-                common,
-                changes: entries,
-            } => {
+            QBIMessage::Sync { common, changes } => {
                 writeln!(f, "QBI_MSG_SYNC common: {}", common)?;
-                for entry in entries {
+                for (resource, entry) in changes.iter() {
                     fmt::Display::fmt(entry, f)?;
+                    fmt::Display::fmt(resource, f)?;
                     writeln!(f)?;
                 }
                 Ok(())

@@ -4,7 +4,7 @@
 //! which handles controlling tasks and processes the control
 //! requests sent by those. It manages the [master].
 
-use qb_core::{common::qbpaths::INTERNAL_CONFIG, fs::wrapper::QBFSWrapper};
+use qb_core::{fs::wrapper::QBFSWrapper, path::qbpaths::INTERNAL_CONFIG};
 use std::{
     collections::{HashMap, HashSet},
     future::Future,

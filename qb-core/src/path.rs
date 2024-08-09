@@ -24,7 +24,7 @@ pub mod qbpaths {
         /// the directory where quixbyte stores internal files
         pub static ref INTERNAL: QBPath = unsafe { QBPath::new("/.qb") };
         /// the internal changelog path
-        pub static ref INTERNAL_CHANGELOG: QBPath = unsafe { QBPath::new("/.qb/changelog") };
+        pub static ref INTERNAL_CHANGEMAP: QBPath = unsafe { QBPath::new("/.qb/changemap") };
         /// the internal filetree path
         pub static ref INTERNAL_FILETREE: QBPath = unsafe { QBPath::new("/.qb/filetree") };
         /// the internal filetable path

@@ -1,8 +1,5 @@
 use core::panic;
-use std::{
-    path::PathBuf,
-    time::{Duration, SystemTime, UNIX_EPOCH},
-};
+use std::{path::PathBuf, time::Duration};
 
 use bitcode::{Decode, Encode};
 use notify::{
@@ -10,9 +7,10 @@ use notify::{
     Event, EventKind, RecursiveMode, Watcher,
 };
 use qb_core::{
-    change::{log::QBChangelog, transaction::QBTransaction, QBChange, QBChangeKind},
-    common::device::QBDeviceId,
+    change::{QBChange, QBChangeKind},
+    device::QBDeviceId,
     fs::{QBFileDiff, QBFS},
+    time::QBTimeStampRecorder,
 };
 use qb_ext::interface::{QBIChannel, QBIContext, QBIHostMessage, QBIMessage, QBISetup};
 use serde::{Deserialize, Serialize};
@@ -41,10 +39,10 @@ impl QBISetup<QBILocal> for QBILocal {
 pub struct Runner {
     com: QBIChannel,
     fs: QBFS,
-    transaction: QBTransaction,
     syncing: bool,
     watcher_skip: Vec<PathBuf>,
     host_id: QBDeviceId,
+    recorder: QBTimeStampRecorder,
 }
 
 impl Runner {
@@ -60,13 +58,15 @@ impl Runner {
         })
         .await;
 
+        let recorder = QBTimeStampRecorder::from(fs.devices.host_id.clone());
+
         Self {
             syncing: false,
             watcher_skip: Vec::new(),
-            transaction: Default::default(),
             host_id,
             fs,
             com,
+            recorder,
         }
     }
 
@@ -78,27 +78,29 @@ impl Runner {
                 self.fs.devices.set_common(&self.host_id, common);
                 self.fs.save_devices().await.unwrap();
             }
-            QBIMessage::Sync { common, changes } => {
+            QBIMessage::Sync { common, .. } => {
                 assert!(self.fs.devices.get_common(&self.host_id).clone() == common);
 
-                let local_entries = self.fs.changelog.after(&common).unwrap();
+                let local_entries = self.fs.changelog.since(&common);
 
                 // Apply changes
-                let (mut entries, fschanges) =
-                    QBChangelog::merge(local_entries.clone(), changes).unwrap();
-                self.watcher_skip.append(
-                    &mut fschanges
-                        .iter()
-                        .map(|e| self.fs.wrapper.fspath(&e.resource))
-                        .collect(),
-                );
+                // TODO: rewrite merging code
+                //let (mut entries, fschanges) =
+                //    QBChangelog::merge(local_entries.clone(), changes).unwrap();
+                //self.watcher_skip.append(
+                //    &mut fschanges
+                //        .iter()
+                //        .map(|e| self.fs.wrapper.fspath(&e.resource))
+                //        .collect(),
+                //);
 
-                self.fs.changelog.append(&mut entries);
+                //self.fs.changelog.append(&mut entries);
 
-                let fschanges = self.fs.table.to_fschanges(fschanges);
-                self.fs.apply_changes(fschanges).await.unwrap();
+                // TODO: implement conversion code
+                //let fschanges = self.fs.table.to_fschanges(fschanges);
+                //self.fs.apply_changes(fschanges).await.unwrap();
 
-                let new_common = self.fs.changelog.head();
+                let new_common = self.fs.changelog.head().clone();
                 self.fs.devices.set_common(&self.host_id, new_common);
 
                 // Send sync to remote
@@ -153,28 +155,23 @@ impl Runner {
             return;
         }
 
-        let ts = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
-
         let change = match event.kind {
             EventKind::Access(AccessKind::Close(AccessMode::Write)) => {
                 let kind = self.fs.diff(&resource).await.unwrap();
                 match kind {
                     Some(QBFileDiff::Text(diff)) => {
-                        QBChange::new(ts, QBChangeKind::UpdateText { diff }, resource)
+                        QBChange::new(self.recorder.record(), QBChangeKind::UpdateText(diff))
                     }
                     Some(QBFileDiff::Binary(contents)) => {
-                        QBChange::new(ts, QBChangeKind::UpdateBinary { contents }, resource)
+                        QBChange::new(self.recorder.record(), QBChangeKind::UpdateBinary(contents))
                     }
                     None => return,
                 }
             }
             EventKind::Modify(ModifyKind::Name(RenameMode::From)) | EventKind::Remove(..) => {
-                QBChange::new(ts, QBChangeKind::Delete, resource)
+                QBChange::new(self.recorder.record(), QBChangeKind::Delete)
             }
-            EventKind::Create(..) => QBChange::new(ts, QBChangeKind::Create, resource),
+            EventKind::Create(..) => QBChange::new(self.recorder.record(), QBChangeKind::Create),
             _ => panic!("this should not happen"),
         };
 
@@ -182,11 +179,11 @@ impl Runner {
         let fschange = self.fs.table.to_fschange(change.clone());
         self.fs.tree.notify_change(&fschange);
 
-        self.transaction.push(change);
+        self.fs.changelog.entries(resource).push(change);
     }
 
     fn should_sync(&mut self) -> bool {
-        !self.syncing && !self.transaction.complete().is_empty()
+        !self.syncing && self.fs.changelog.head() != self.fs.devices.get_common(&self.host_id)
     }
 
     async fn sync(&mut self) {
@@ -195,13 +192,8 @@ impl Runner {
         self.syncing = true;
 
         // Complete transaction
-        let mut changes = std::mem::take(&mut self.transaction).complete_into();
-        // TODO: embed this directly
-        let fschanges = self.fs.table.to_fschanges(changes.clone());
-        self.fs.notify_changes(fschanges.iter());
-        self.fs.changelog.append(&mut changes);
         let common = self.fs.devices.get_common(&self.host_id).clone();
-        let changes = self.fs.changelog.after_cloned(&common).unwrap();
+        let changes = self.fs.changelog.since_cloned(&common);
 
         // save the changes applied
         self.fs.save().await.unwrap();

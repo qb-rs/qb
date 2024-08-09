@@ -7,12 +7,10 @@
 use std::{collections::HashMap, future::Future, pin::Pin, rc::Rc};
 
 use qb_core::{
-    change::log::QBChangelog,
-    common::{
-        device::{QBDeviceId, QBDeviceTable},
-        qbpaths::{INTERNAL_CHANGELOG, INTERNAL_DEVICES},
-    },
+    change::QBChangeMap,
+    device::{QBDeviceId, QBDeviceTable},
     fs::wrapper::QBFSWrapper,
+    path::qbpaths::{INTERNAL_CHANGEMAP, INTERNAL_DEVICES},
 };
 use qb_ext::{
     hook::{QBHChannel, QBHContext, QBHHostMessage, QBHId, QBHSlaveMessage},
@@ -95,7 +93,7 @@ pub struct QBMaster {
     pub hook_rx: mpsc::Receiver<(QBHId, QBHSlaveMessage)>,
     hook_tx: mpsc::Sender<(QBHId, QBHSlaveMessage)>,
     devices: QBDeviceTable,
-    changelog: QBChangelog,
+    changemap: QBChangeMap,
     wrapper: QBFSWrapper,
 }
 
@@ -110,7 +108,7 @@ impl QBMaster {
 
         wrapper.init().await.unwrap();
         let devices = wrapper.dload(INTERNAL_DEVICES.as_ref()).await;
-        let changelog = wrapper.dload(INTERNAL_CHANGELOG.as_ref()).await;
+        let changemap = wrapper.dload(INTERNAL_CHANGEMAP.as_ref()).await;
 
         QBMaster {
             interfaces: HashMap::new(),
@@ -120,7 +118,7 @@ impl QBMaster {
             hook_rx,
             hook_tx,
             devices,
-            changelog,
+            changemap,
             wrapper,
         }
     }
@@ -132,7 +130,7 @@ impl QBMaster {
             .await
             .unwrap();
         self.wrapper
-            .save(INTERNAL_CHANGELOG.as_ref(), &self.changelog)
+            .save(INTERNAL_CHANGEMAP.as_ref(), &self.changemap)
             .await
             .unwrap();
     }
@@ -221,18 +219,19 @@ impl QBMaster {
         let handle_common = self.devices.get_common(&device_id);
 
         match msg {
-            QBIMessage::Sync { common, changes } => {
+            QBIMessage::Sync { common, .. } => {
                 assert!(handle_common == &common);
 
                 // Find local changes
-                let local_entries = self.changelog.after(&common).unwrap();
+                let local_entries = self.changemap.since(&common);
 
                 // Apply changes to changelog
-                let (mut entries, _) = QBChangelog::merge(local_entries.clone(), changes).unwrap();
-                self.changelog.append(&mut entries);
+                // TODO: merging
+                //let (mut entries, _) = QBChangelog::merge(local_entries.clone(), changes).unwrap();
+                //self.changemap.append(&mut entries);
 
-                // Negotiate a new common hash
-                let new_common = self.changelog.head();
+                // find the new common hash
+                let new_common = self.changemap.head().clone();
                 self.devices.set_common(&device_id, new_common);
 
                 // Send sync to remote
@@ -389,7 +388,7 @@ impl QBMaster {
                 }
 
                 let handle_common = self.devices.get_common(&device_id);
-                let changes = self.changelog.after_cloned(handle_common).unwrap();
+                let changes = self.changemap.since_cloned(handle_common);
 
                 // skip if no changes to sync
                 if changes.is_empty() {

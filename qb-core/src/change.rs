@@ -3,9 +3,10 @@
 //! This module provides primitives for working with changes applied
 //! to a filesystem.
 
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt};
 
 use bitcode::{Decode, Encode};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::{diff::QBDiff, path::QBResource, time::QBTimeStampUnique};
@@ -17,6 +18,19 @@ pub struct QBChange {
     pub timestamp: QBTimeStampUnique,
     /// The kind of change
     pub kind: QBChangeKind,
+}
+
+impl fmt::Display for QBChange {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} {:?}", self.timestamp, self.kind)
+    }
+}
+
+impl QBChange {
+    /// Construct a new change.
+    pub fn new(timestamp: QBTimeStampUnique, kind: QBChangeKind) -> Self {
+        Self { timestamp, kind }
+    }
 }
 
 /// The kind of change.
@@ -61,14 +75,15 @@ impl QBChangeKind {
 }
 
 /// This struct is a map which stores a collection of changes for each resource.
-#[derive(Encode, Decode, Serialize, Deserialize, Debug, Default)]
+#[derive(Encode, Decode, Serialize, Deserialize, Debug, Default, Clone)]
 pub struct QBChangeMap {
     changes: HashMap<QBResource, Vec<QBChange>>,
+    head: QBTimeStampUnique,
 }
 
 impl QBChangeMap {
     /// Gets the changes since the timestamp.
-    pub fn since_cloned(&self, since: QBTimeStampUnique) -> QBChangeMap {
+    pub fn since_cloned(&self, since: &QBTimeStampUnique) -> QBChangeMap {
         // iterator magic
         let changes = self
             .changes
@@ -78,7 +93,7 @@ impl QBChangeMap {
                     resource.clone(),
                     entries
                         .into_iter()
-                        .filter(|e| e.timestamp > since)
+                        .filter(|e| &e.timestamp > since)
                         .cloned()
                         .collect::<Vec<_>>(),
                 )
@@ -86,11 +101,56 @@ impl QBChangeMap {
             .filter(|(_, entries)| !entries.is_empty())
             .collect::<HashMap<_, _>>();
 
-        QBChangeMap { changes }
+        QBChangeMap {
+            changes,
+            head: self.head.clone(),
+        }
+    }
+
+    /// Gets the changes since the timestamp.
+    pub fn since(&mut self, since: &QBTimeStampUnique) -> QBChangeMap {
+        // iterator magic
+        let changes = self
+            .changes
+            .iter_mut()
+            .filter_map(|(resource, entries)| {
+                Some((
+                    resource.clone(),
+                    entries
+                        .drain(entries.iter().position(|e| &e.timestamp > since)?..)
+                        .collect(),
+                ))
+            })
+            .collect::<HashMap<_, _>>();
+
+        QBChangeMap {
+            changes,
+            head: self.head.clone(),
+        }
+    }
+
+    /// Returns whether this changemap is empty.
+    #[inline(always)]
+    pub fn is_empty(&self) -> bool {
+        self.changes.is_empty()
+    }
+
+    /// Iterate over the changes.
+    pub fn iter(&self) -> impl Iterator<Item = (&QBResource, &QBChange)> {
+        self.changes
+            .iter()
+            .map(|(resource, entries)| entries.into_iter().map(move |change| (resource, change)))
+            .flatten()
+            .sorted_by(|a, b| a.1.timestamp.cmp(&b.1.timestamp))
+    }
+
+    /// Return the head of this changemap (the last change).
+    pub fn head(&self) -> &QBTimeStampUnique {
+        &self.head
     }
 
     /// Gets the changes for a given resource from this changemap.
-    #[inline]
+    #[inline(always)]
     pub fn entries(&mut self, resource: QBResource) -> &mut Vec<QBChange> {
         self.changes.entry(resource).or_default()
     }
@@ -102,12 +162,12 @@ impl QBChangeMap {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn _sort(entries: &mut [QBChange]) {
         entries.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
     }
 
-    #[inline]
+    #[inline(always)]
     fn _sort_borrowed(entries: &mut [&QBChange]) {
         entries.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
     }
@@ -120,7 +180,7 @@ impl QBChangeMap {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     fn _minify(entries: &mut Vec<QBChange>) {
         let mut remove_until = 0;
 

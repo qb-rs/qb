@@ -4,7 +4,7 @@
 //! that allow for two devices running quixbyte to communicate
 //! over the TCP protocol (with TLS).
 
-use qb_core::common::QBDeviceId;
+use qb_core::device::QBDeviceId;
 use qb_ext::interface::{QBIChannel, QBIHostMessage, QBIMessage, QBISlaveMessage};
 use qb_proto::QBP;
 use tokio::net::TcpStream;

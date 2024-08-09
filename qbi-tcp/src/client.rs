@@ -5,7 +5,7 @@
 use std::sync::Arc;
 
 use bitcode::{Decode, Encode};
-use qb_core::common::QBDeviceId;
+use qb_core::device::QBDeviceId;
 use qb_ext::interface::{QBIChannel, QBIContext, QBISetup};
 use qb_proto::QBP;
 use rustls::{

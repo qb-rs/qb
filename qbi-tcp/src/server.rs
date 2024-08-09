@@ -8,7 +8,7 @@ use std::{
     sync::Arc,
 };
 
-use qb_core::common::QBDeviceId;
+use qb_core::device::QBDeviceId;
 use qb_ext::{
     hook::{QBHContext, QBHInit},
     interface::{QBIChannel, QBIContext},
