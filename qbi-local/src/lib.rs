@@ -10,7 +10,7 @@ use qb_core::{
     change::{QBChange, QBChangeKind},
     device::QBDeviceId,
     fs::{QBFileDiff, QBFS},
-    path::{qbpaths::INTERNAL, QBPath},
+    path::{qbpaths::INTERNAL, QBPath, QBResource},
     time::QBTimeStampRecorder,
 };
 use qb_ext::interface::{QBIChannel, QBIContext, QBIHostMessage, QBIMessage, QBISetup};
@@ -150,18 +150,11 @@ impl Runner {
                 return;
             }
             EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
-                self.fs.wrapper
-                let tracker = event.tracker().unwrap();
-                println!(
-                    "RENAME: {} -> {}",
-                    self.trackers.remove(&tracker).unwrap(),
-                    path
-                );
-                return;
+                self.fs.wrapper.to_resource(path).await.unwrap()
             }
             EventKind::Create(CreateKind::File)
             | EventKind::Remove(RemoveKind::File)
-            | EventKind::Access(AccessKind::Close(AccessMode::Write)) => path.file(),
+            | EventKind::Modify(ModifyKind::Data(_)) => path.file(),
             _ => return,
         };
 
@@ -176,7 +169,7 @@ impl Runner {
         }
 
         let change = match event.kind {
-            EventKind::Access(AccessKind::Close(AccessMode::Write)) => {
+            EventKind::Modify(ModifyKind::Data(_)) => {
                 let kind = self.fs.diff(&resource).await.unwrap();
                 match kind {
                     Some(QBFileDiff::Text(diff)) => {
@@ -187,6 +180,15 @@ impl Runner {
                     }
                     None => return,
                 }
+            }
+            EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
+                let ts = self.recorder.record();
+                let previouspath = self.trackers.remove(&event.tracker().unwrap()).unwrap();
+                self.fs.changemap.push(
+                    QBResource::new(previouspath, resource.kind.clone()),
+                    QBChange::new(ts.clone(), QBChangeKind::RenameFrom),
+                );
+                QBChange::new(ts, QBChangeKind::RenameTo)
             }
             EventKind::Remove(..) => {
                 info!("DELETE {}", resource);

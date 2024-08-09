@@ -9,7 +9,11 @@ use bitcode::{Decode, Encode};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{diff::QBDiff, path::QBResource, time::QBTimeStampUnique};
+use crate::{
+    diff::QBDiff,
+    path::{QBPath, QBResource},
+    time::QBTimeStampUnique,
+};
 
 /// This struct represents a change applied to some file.
 #[derive(Encode, Decode, Serialize, Deserialize, Debug, Clone)]
@@ -216,42 +220,65 @@ impl QBChangeMap {
 
     /// Minifies this changemap.
     pub fn minify(&mut self) {
-        for entries in self.changes.values_mut() {
-            Self::_sort(entries);
-            Self::_minify(entries);
+        // really bad implementation currently. TODO: fix this
+        for (resource, entries) in self.changes.clone().iter() {
+            let mut remove_until = 0;
+
+            let mut i = 0;
+            while i < entries.len() {
+                match &entries[i].kind {
+                    // TODO: collapse diffs
+                    kind if kind.is_external() => remove_until = i + 1,
+                    QBChangeKind::Create => remove_until = i,
+                    QBChangeKind::Delete => {
+                        // remove unused, logged changes
+                        if matches!(entries[remove_until].kind, QBChangeKind::Create) {
+                            i += 1;
+                        }
+
+                        self.changes
+                            .get_mut(resource)
+                            .unwrap()
+                            .drain(remove_until..i)
+                            .len();
+
+                        continue;
+                    }
+                    QBChangeKind::RenameFrom => {
+                        if matches!(entries[remove_until].kind, QBChangeKind::Create) {
+                            let mut changes = self
+                                .changes
+                                .get_mut(resource)
+                                .unwrap()
+                                .drain(remove_until..i + 1)
+                                .collect::<Vec<_>>();
+                            changes.pop();
+
+                            let (index, resource) =
+                                self.get_rename_to(&entries[i].timestamp).unwrap();
+
+                            let to_entries = self.changes.get_mut(&resource.clone()).unwrap();
+                            let mut head = to_entries.drain(index..).collect::<Vec<_>>();
+                            to_entries.append(&mut changes);
+                            to_entries.append(&mut head);
+                        }
+                    }
+                    // TODO: collapse diffs using file table
+                    _ => {}
+                }
+
+                i += 1;
+            }
         }
     }
 
-    #[inline(always)]
-    fn _minify(entries: &mut Vec<QBChange>) {
-        let mut remove_until = 0;
-
-        let mut i = 0;
-        while i < entries.len() {
-            match &entries[i].kind {
-                // TODO: collapse diffs
-                kind if kind.is_external() => remove_until = i + 1,
-                QBChangeKind::Create => remove_until = i + 1,
-                QBChangeKind::Delete => {
-                    // remove unused, logged changes
-                    i -= entries.drain(remove_until..i).len();
-
-                    // remove direct create => delete chainsa
-                    if i != 0 && matches!(entries[i - 1].kind, QBChangeKind::Create) {
-                        debug_assert_eq!(entries.drain((i - 1)..(i + 1)).len(), 2);
-                        i -= 1;
-                    } else {
-                        i += 1;
-                    }
-
-                    continue;
-                }
-                // TODO: collapse diffs using file table
-                _ => {}
-            }
-
-            i += 1;
-        }
+    pub fn get_rename_to(&self, timestamp: &QBTimeStampUnique) -> Option<(usize, &QBResource)> {
+        self.changes.iter().find_map(|(resource, entries)| {
+            entries
+                .into_iter()
+                .position(|change| &change.timestamp == timestamp)
+                .map(|i| (i, resource))
+        })
     }
 
     // TODO: collision detection
@@ -265,7 +292,6 @@ impl QBChangeMap {
             if let Some(mut entries) = self.changes.get_mut(&resource) {
                 // TODO: do this properly
                 let mut rchanges = remote_entries.clone();
-                Self::_minify(&mut rchanges);
                 changes.extend(&mut rchanges.into_iter().map(|e| (resource.clone(), e)));
 
                 *entries = Self::_merge(remote_entries, &mut entries);
@@ -290,7 +316,6 @@ impl QBChangeMap {
     fn _merge(mut a: Vec<QBChange>, b: &mut Vec<QBChange>) -> Vec<QBChange> {
         a.append(b);
         Self::_sort(&mut a);
-        Self::_minify(&mut a);
 
         let til = a
             .iter()
