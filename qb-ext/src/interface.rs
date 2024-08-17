@@ -112,6 +112,7 @@ impl fmt::Display for QBIMessage {
                 writeln!(f, "QBI_MSG_SYNC common: {}", common)?;
                 for (resource, entry) in changes.iter() {
                     fmt::Display::fmt(entry, f)?;
+                    write!(f, " ")?;
                     fmt::Display::fmt(resource, f)?;
                     writeln!(f)?;
                 }

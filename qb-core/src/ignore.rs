@@ -9,7 +9,7 @@ use bitcode::{Decode, Encode};
 use thiserror::Error;
 use tracing::warn;
 
-use crate::fs::table::{QBFSChange, QBFSChangeKind, QBFileTable};
+use crate::fs::{table::QBFileTable, QBFSChange, QBFSChangeKind};
 
 use super::{
     hash::QBHash,
@@ -41,6 +41,7 @@ impl<'a> From<&'a ignore::gitignore::Glob> for QBIgnoreGlob<'a> {
 }
 
 /// struct describing an ignore file
+#[derive(Clone)]
 pub struct QBIgnore(ignore::gitignore::Gitignore);
 
 impl QBIgnore {
@@ -91,6 +92,14 @@ impl QBIgnoreMapBuilder {
             }
             QBFSChangeKind::Delete => _ = self.ignores.remove(&path),
             QBFSChangeKind::Create => {}
+            QBFSChangeKind::Rename { from } => {
+                let hash = self.ignores.remove(&from).unwrap();
+                self.ignores.insert(path, hash);
+            }
+            QBFSChangeKind::Copy { from } => {
+                let hash = self.ignores.get(from).unwrap().clone();
+                self.ignores.insert(path, hash);
+            }
         };
     }
 
@@ -154,6 +163,14 @@ impl QBIgnoreMap {
             }
             QBFSChangeKind::Delete => _ = self.ignores.remove(&path),
             QBFSChangeKind::Create => {}
+            QBFSChangeKind::Rename { from } => {
+                let hash = self.ignores.remove(&from).unwrap();
+                self.ignores.insert(path, hash);
+            }
+            QBFSChangeKind::Copy { from } => {
+                let hash = self.ignores.get(from).unwrap().clone();
+                self.ignores.insert(path, hash);
+            }
         };
     }
 

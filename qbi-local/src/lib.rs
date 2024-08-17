@@ -3,7 +3,7 @@ use std::{collections::HashMap, path::PathBuf, time::Duration};
 
 use bitcode::{Decode, Encode};
 use notify::{
-    event::{AccessKind, AccessMode, CreateKind, ModifyKind, RemoveKind, RenameMode},
+    event::{CreateKind, ModifyKind, RemoveKind, RenameMode},
     Event, EventKind, RecursiveMode, Watcher,
 };
 use qb_core::{
@@ -90,18 +90,17 @@ impl Runner {
                 let local = self.fs.changemap.since(&common);
 
                 // Apply changes
-                //self.watcher_skip.append(
-                //    &mut fschanges
-                //        .iter()
-                //        .map(|e| self.fs.wrapper.fspath(&e.resource))
-                //        .collect(),
-                //);
-
                 let mut changemap = local.clone();
                 let changes = changemap.merge(remote).unwrap();
                 self.fs.changemap.append(changemap);
-
-                //self.fs.changelog.append(&mut entries);
+                let fschanges = self.fs.to_fschanges(changes);
+                self.watcher_skip.append(
+                    &mut fschanges
+                        .iter()
+                        .map(|e| self.fs.wrapper.fspath(&e.resource))
+                        .collect(),
+                );
+                self.fs.apply_changes(fschanges).await.unwrap();
 
                 // TODO: implement conversion code
                 //let fschanges = self.fs.table.to_fschanges(fschanges);
@@ -213,7 +212,6 @@ impl Runner {
         // Complete transaction
         let common = self.fs.devices.get_common(&self.host_id).clone();
         let mut changes = self.fs.changemap.since_cloned(&common);
-        info!("before MINIFY {:?}", changes);
         changes.minify();
 
         // save the changes applied
@@ -250,7 +248,7 @@ impl Runner {
                 Some(Ok(event)) = watcher_rx.recv() => {
                     self.on_watcher(event).await;
                 },
-                _ = tokio::time::sleep(Duration::from_secs(1)), if self.should_sync() => {
+                _ = tokio::time::sleep(Duration::from_secs(3)), if self.should_sync() => {
                     self.sync().await;
                 },
                 _ = tokio::time::sleep(Duration::from_secs(1)), if !self.watcher_skip.is_empty() => {

@@ -193,6 +193,7 @@ impl QBMaster {
                             device_id: device_id.clone(),
                             syncing: false,
                         };
+                        self.sync().await;
                     }
                     // The interface should not send any messages before the
                     // init message has been sent. This is likely an error.

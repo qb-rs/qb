@@ -18,13 +18,10 @@ use crate::{
     path::{qbpaths, QBPath, QBResource},
 };
 
-use super::{
-    table::{QBFSChange, QBFSChangeKind},
-    wrapper::QBFSWrapper,
-};
+use super::{wrapper::QBFSWrapper, QBFSChange, QBFSChangeKind};
 
 /// a node stored in a [QBFileTree]
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Clone, Debug)]
 pub enum QBFileTreeNode {
     /// a directory
     Dir(TreeDir),
@@ -98,7 +95,7 @@ impl QBFileTreeNode {
 
 /// A struct stored in the tree, which represents a directory
 /// on the file system.
-#[derive(Encode, Decode, Default)]
+#[derive(Encode, Decode, Default, Clone, Debug)]
 pub struct TreeDir {
     /// the contents of the directory
     pub contents: HashMap<String, usize>,
@@ -126,7 +123,7 @@ impl From<TreeDir> for QBFileTreeNode {
 /// File's contents will only be cached if file is
 /// 1. utf8 encoded/non binary and therefore diffable
 /// 2. smaller than a certain maximum
-#[derive(Encode, Decode)]
+#[derive(Encode, Decode, Clone, Debug)]
 pub struct TreeFile {
     /// the hash of this file
     pub hash: QBHash,
@@ -224,6 +221,14 @@ impl QBFileTree {
             }
             QBFSChangeKind::Create => {
                 self.create(resource);
+            }
+            QBFSChangeKind::Rename { from } => {
+                let entry = self.remove(from).unwrap();
+                self.insert(resource, entry);
+            }
+            QBFSChangeKind::Copy { from } => {
+                let entry = self.get(from).unwrap().clone();
+                self.insert(resource, entry);
             }
         }
     }
@@ -483,9 +488,20 @@ impl QBFileTree {
     }
 
     /// Insert a node into the tree structure
-    pub fn insert(&mut self, path: impl AsRef<QBPath>, node: impl Into<QBFileTreeNode>) {
-        let idx = self.create_ptr(path).expect("path goes over file");
-        self.arena[idx] = node.into();
+    pub fn insert(
+        &mut self,
+        path: impl AsRef<QBPath>,
+        node: impl Into<QBFileTreeNode>,
+    ) -> Option<QBFileTreeNode> {
+        let idx = self.get_or_create_ptr(path).expect("path goes over file");
+        if !self.arena[idx].is_none() {
+            let mut res = node.into();
+            std::mem::swap(&mut res, &mut self.arena[idx]);
+            Some(res)
+        } else {
+            self.arena[idx] = node.into();
+            None
+        }
     }
 
     /// Remove and return an entry

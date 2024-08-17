@@ -11,26 +11,28 @@ use std::{ffi::OsString, path::Path};
 use thiserror::Error;
 use tracing::warn;
 
-use table::{QBFSChange, QBFSChangeKind, QBFileTable};
+use table::QBFileTable;
 use tree::{QBFileTree, TreeFile};
 use wrapper::QBFSWrapper;
 
 use crate::{
-    change::QBChangeMap,
+    change::{QBChange, QBChangeKind, QBChangeMap},
     device::QBDeviceTable,
     diff::QBDiff,
     hash::QBHash,
     ignore::{QBIgnoreMap, QBIgnoreMapBuilder},
-    path::qbpaths::{
-        INTERNAL_CHANGEMAP, INTERNAL_DEVICES, INTERNAL_FILETABLE, INTERNAL_FILETREE,
-        INTERNAL_IGNORE,
+    path::{
+        qbpaths::{
+            self, INTERNAL_CHANGEMAP, INTERNAL_DEVICES, INTERNAL_FILETABLE, INTERNAL_FILETREE,
+            INTERNAL_IGNORE,
+        },
+        QBPath, QBPathError, QBResource,
     },
-    path::{qbpaths, QBPath, QBPathError},
 };
 
 /// struct describing an error that occured while dealing with the file system
 #[derive(Error, Debug)]
-pub enum QBFSError {
+pub enum Error {
     /// I/O error
     #[error("I/O error")]
     IO(#[from] std::io::Error),
@@ -48,7 +50,45 @@ pub enum QBFSError {
     NotFound,
 }
 
-pub(crate) type QBFSResult<T> = Result<T, QBFSError>;
+pub(crate) type Result<T> = std::result::Result<T, Error>;
+
+/// struct describing a change that can be directly applied to the file system
+///
+/// this differs from [QBChange], as the diff stored in UpdateText
+/// is already expanded, so no further processing is required.
+#[derive(Debug)]
+pub struct QBFSChange {
+    /// the resource this change affects
+    pub resource: QBResource,
+    /// the kind of change
+    pub kind: QBFSChangeKind,
+}
+
+/// enum describing the different kinds of changes
+#[derive(Debug)]
+pub enum QBFSChangeKind {
+    /// update a file
+    Update {
+        /// the file content
+        content: Vec<u8>,
+        /// the hash of the content
+        hash: QBHash,
+    },
+    /// create a file or directory
+    Create,
+    /// delete a file or directory
+    Delete,
+    /// rename a file or directory
+    Rename {
+        /// location
+        from: QBPath,
+    },
+    /// copy a file or directory
+    Copy {
+        /// location
+        from: QBPath,
+    },
+}
 
 /// struct describing a text or binary diff of a file
 pub enum QBFileDiff {
@@ -102,6 +142,55 @@ impl QBFS {
         }
     }
 
+    /// convert the given change to fs change
+    pub fn to_fschanges(&mut self, changes: Vec<(QBResource, QBChange)>) -> Vec<QBFSChange> {
+        // optimistic allocation
+        let mut fschanges = Vec::with_capacity(changes.len());
+        let mut source = None;
+        for (resource, change) in changes {
+            let kind = match &change.kind {
+                QBChangeKind::Create => Some(QBFSChangeKind::Create),
+                QBChangeKind::Delete => Some(QBFSChangeKind::Delete),
+                QBChangeKind::UpdateBinary(content) => {
+                    let hash = QBHash::compute(&content);
+                    Some(QBFSChangeKind::Update {
+                        content: content.clone(),
+                        hash,
+                    })
+                }
+                QBChangeKind::UpdateText(diff) => {
+                    let old = self.table.get(&diff.old_hash).to_string();
+                    let contents = diff.apply(old);
+                    let hash = QBHash::compute(&contents);
+                    self.table.insert_hash(hash.clone(), contents.clone());
+                    Some(QBFSChangeKind::Update {
+                        content: contents.into(),
+                        hash,
+                    })
+                }
+                QBChangeKind::CopyFrom | QBChangeKind::RenameFrom => {
+                    source = Some(resource.path.clone());
+                    None
+                }
+                QBChangeKind::CopyTo => Some(QBFSChangeKind::Copy {
+                    from: source.clone().unwrap(),
+                }),
+                QBChangeKind::RenameTo => Some(QBFSChangeKind::Rename {
+                    from: source.clone().unwrap(),
+                }),
+            };
+
+            if let Some(kind) = kind {
+                fschanges.push(QBFSChange {
+                    resource: resource.clone(),
+                    kind,
+                });
+            }
+        }
+
+        fschanges
+    }
+
     /// Process changes that were applied to the underlying file system
     pub fn notify_changes<'a>(&mut self, changes: impl Iterator<Item = &'a QBFSChange>) {
         for change in changes {
@@ -112,7 +201,7 @@ impl QBFS {
     /// Applies changes to this filesystem.
     ///
     /// !!!Use with caution, Safety checks not yet implemented!!!
-    pub async fn apply_changes(&mut self, changes: Vec<QBFSChange>) -> QBFSResult<()> {
+    pub async fn apply_changes(&mut self, changes: Vec<QBFSChange>) -> Result<()> {
         for change in changes {
             self.apply_change(change).await?;
         }
@@ -130,7 +219,7 @@ impl QBFS {
     /// Applies a single change to this filesystem.
     ///
     /// !!!Use with caution, Safety checks not yet implemented!!!
-    pub async fn apply_change(&mut self, change: QBFSChange) -> QBFSResult<()> {
+    pub async fn apply_change(&mut self, change: QBFSChange) -> Result<()> {
         self.notify_change(&change);
 
         let kind = change.kind;
@@ -170,13 +259,21 @@ impl QBFS {
                     }
                 };
             }
+
+            QBFSChangeKind::Copy { from } => {
+                self.wrapper.copy(from, resource).await?;
+            }
+            QBFSChangeKind::Rename { from } => {
+                // TODO: safe overwrites
+                self.wrapper.rename(from, resource).await?;
+            }
         }
 
         Ok(())
     }
 
     /// Compare the entry on the filesystem to the entry stored
-    pub async fn diff(&mut self, path: impl AsRef<QBPath>) -> QBFSResult<Option<QBFileDiff>> {
+    pub async fn diff(&mut self, path: impl AsRef<QBPath>) -> Result<Option<QBFileDiff>> {
         let contents = self.wrapper.read(&path).await?;
         let hash = QBHash::compute(&contents);
 
@@ -205,42 +302,42 @@ impl QBFS {
     }
 
     /// Save changelog to file system.
-    pub async fn save_changelog(&self) -> QBFSResult<()> {
+    pub async fn save_changelog(&self) -> Result<()> {
         self.wrapper
             .save(qbpaths::INTERNAL_CHANGEMAP.as_ref(), &self.changemap)
             .await
     }
 
     /// Save devices to file system.
-    pub async fn save_devices(&self) -> QBFSResult<()> {
+    pub async fn save_devices(&self) -> Result<()> {
         self.wrapper
             .save(qbpaths::INTERNAL_DEVICES.as_ref(), &self.devices)
             .await
     }
 
     /// Save file tree to file system.
-    pub async fn save_tree(&self) -> QBFSResult<()> {
+    pub async fn save_tree(&self) -> Result<()> {
         self.wrapper
             .save(qbpaths::INTERNAL_FILETREE.as_ref(), &self.tree)
             .await
     }
 
     /// Save file table to file system.
-    pub async fn save_table(&self) -> QBFSResult<()> {
+    pub async fn save_table(&self) -> Result<()> {
         self.wrapper
             .save(qbpaths::INTERNAL_FILETABLE.as_ref(), &self.table)
             .await
     }
 
     /// Save ignore builder to file system.
-    pub async fn save_ignore(&self) -> QBFSResult<()> {
+    pub async fn save_ignore(&self) -> Result<()> {
         self.wrapper
             .save(qbpaths::INTERNAL_IGNORE.as_ref(), &self.ignore_builder)
             .await
     }
 
     /// Save state to file system.
-    pub async fn save(&self) -> QBFSResult<()> {
+    pub async fn save(&self) -> Result<()> {
         self.save_changelog().await?;
         self.save_devices().await?;
         self.save_tree().await?;

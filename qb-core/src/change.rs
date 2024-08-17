@@ -9,11 +9,7 @@ use bitcode::{Decode, Encode};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    diff::QBDiff,
-    path::{QBPath, QBResource},
-    time::QBTimeStampUnique,
-};
+use crate::{diff::QBDiff, path::QBResource, time::QBTimeStampUnique};
 
 /// This struct represents a change applied to some file.
 #[derive(Encode, Decode, Serialize, Deserialize, Debug, Clone)]
@@ -166,7 +162,7 @@ impl QBChangeMap {
             .iter()
             .map(|(resource, entries)| entries.into_iter().map(move |change| (resource, change)))
             .flatten()
-            .sorted_by(|a, b| a.1.timestamp.cmp(&b.1.timestamp))
+            .sorted_unstable_by(|a, b| Self::_sort_entry(a.1, b.1))
     }
 
     /// Return the head of this changemap (the last change).
@@ -210,12 +206,22 @@ impl QBChangeMap {
 
     #[inline(always)]
     fn _sort(entries: &mut [QBChange]) {
-        entries.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+        entries.sort_unstable_by(Self::_sort_entry);
     }
 
     #[inline(always)]
     fn _sort_borrowed(entries: &mut [&QBChange]) {
-        entries.sort_by(|a, b| a.timestamp.cmp(&b.timestamp));
+        entries.sort_unstable_by(|a, b| Self::_sort_entry(*a, *b));
+    }
+
+    fn _sort_entry(a: &QBChange, b: &QBChange) -> std::cmp::Ordering {
+        match a.timestamp.cmp(&b.timestamp) {
+            std::cmp::Ordering::Equal => match a.kind {
+                QBChangeKind::RenameFrom | QBChangeKind::CopyFrom => std::cmp::Ordering::Less,
+                _ => std::cmp::Ordering::Greater,
+            },
+            v => v,
+        }
     }
 
     /// Minifies this changemap.
@@ -272,6 +278,7 @@ impl QBChangeMap {
         }
     }
 
+    /// Get the rename to for this entry
     pub fn get_rename_to(&self, timestamp: &QBTimeStampUnique) -> Option<(usize, &QBResource)> {
         self.changes.iter().find_map(|(resource, entries)| {
             entries
@@ -291,7 +298,7 @@ impl QBChangeMap {
         for (resource, mut remote_entries) in remote.changes.into_iter() {
             if let Some(mut entries) = self.changes.get_mut(&resource) {
                 // TODO: do this properly
-                let mut rchanges = remote_entries.clone();
+                let rchanges = remote_entries.clone();
                 changes.extend(&mut rchanges.into_iter().map(|e| (resource.clone(), e)));
 
                 *entries = Self::_merge(remote_entries, &mut entries);
@@ -310,6 +317,7 @@ impl QBChangeMap {
             }
         }
 
+        changes.sort_unstable_by(|a, b| Self::_sort_entry(&a.1, &b.1));
         Ok(changes)
     }
 
