@@ -8,7 +8,7 @@
 
 #![warn(missing_docs)]
 
-use std::{str::FromStr, sync::Arc};
+use std::{pin::Pin, str::FromStr, sync::Arc};
 
 use clap::Parser;
 use daemon::QBDaemon;
@@ -20,6 +20,7 @@ use qb_core::fs::wrapper::QBFSWrapper;
 use qb_ext::hook::QBHId;
 use qbi_local::QBILocal;
 use qbi_tcp::{QBHTCPServer, QBITCPClient};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tracing::{info, level_filters::LevelFilter};
 use tracing_panic::panic_hook;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
@@ -31,12 +32,20 @@ pub mod master;
 #[command(version, about)]
 struct Cli {
     /// Do not bind to a socket [default]
-    #[arg(long = "bind")]
-    _bind: bool,
+    #[arg(long = "ípc")]
+    _ipc_bind: bool,
 
     /// Don't bind to a socket
-    #[clap(long = "no-bind", overrides_with = "_bind")]
-    no_bind: bool,
+    #[clap(long = "no-ipc", overrides_with = "_ipc_bind")]
+    no_ipc_bind: bool,
+
+    /// Don't use STDIN/STDOUT for controlling [default]
+    #[clap(long = "no-stdio")]
+    _no_stdio_bind: bool,
+
+    /// Use STDIN/STDOUT for controlling
+    #[clap(long = "stdio", overrides_with = "_no_stdio_bind")]
+    stdio_bind: bool,
 
     #[clap(long, short, default_value = "./")]
     path: String,
@@ -45,12 +54,11 @@ struct Cli {
 #[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 async fn main() {
     let args = Cli::parse();
-    let bind = !args.no_bind;
+    let ipc_bind = !args.no_ipc_bind;
+    let stdio_bind = args.stdio_bind;
 
     // Setup formatting
     std::panic::set_hook(Box::new(panic_hook));
-
-    let stdout_log = tracing_subscriber::fmt::layer().pretty();
 
     // A layer that logs events to a file.
     let file = std::fs::File::create("/tmp/qb-daemon.log").unwrap();
@@ -58,16 +66,22 @@ async fn main() {
         .with_ansi(false)
         .with_writer(Arc::new(file));
 
-    let env_log_level = std::env::var("LOG_LEVEL").unwrap_or("info".to_string());
-    tracing_subscriber::registry()
-        .with(
-            stdout_log
-                .with_filter(LevelFilter::from_str(env_log_level.as_str()).unwrap())
-                .and_then(debug_log),
-        )
-        .init();
+    // disable stdout if std_bind
+    if !stdio_bind {
+        let stdout_log = tracing_subscriber::fmt::layer().pretty();
+        let env_log_level = std::env::var("LOG_LEVEL").unwrap_or("info".to_string());
+        tracing_subscriber::registry()
+            .with(
+                stdout_log
+                    .with_filter(LevelFilter::from_str(env_log_level.as_str()).unwrap())
+                    .and_then(debug_log),
+            )
+            .init();
+    } else {
+        tracing_subscriber::registry().with(debug_log).init();
+    }
 
-    let socket = if bind {
+    let socket = if ipc_bind {
         let name = "qb-daemon.sock";
         info!("bind to socket {}", name);
         let name = name.to_ns_name::<GenericNamespaced>().unwrap();
@@ -96,6 +110,10 @@ async fn main() {
     daemon.register::<QBITCPClient, QBITCPClient>("tcp");
     daemon.autostart().await;
 
+    if stdio_bind {
+        daemon.init_handle(StdStream::open()).await;
+    }
+
     // Process
     loop {
         match &socket {
@@ -119,10 +137,60 @@ async fn main() {
                     Some(v) = daemon.master.interface_rx.recv() => daemon.master.iprocess(v).await,
                     // process hooks
                     Some(v) = daemon.master.hook_rx.recv() => daemon.master.hprocess(v).await,
+                    // process control messages
+                    Some(v) = daemon.req_rx.recv() => daemon.process(v).await,
                     // process daemon setup queue
                     v = daemon.setup.join() => daemon.process_setup(v).await,
                 }
             }
         }
+    }
+}
+
+#[derive(Debug)]
+struct StdStream {
+    stdin: tokio::io::Stdin,
+    stdout: tokio::io::Stdout,
+}
+
+impl StdStream {
+    pub fn open() -> Self {
+        let stdin = tokio::io::stdin();
+        let stdout = tokio::io::stdout();
+        StdStream { stdin, stdout }
+    }
+}
+
+impl AsyncRead for StdStream {
+    fn poll_read(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        Pin::new(&mut self.stdin).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for StdStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<Result<usize, std::io::Error>> {
+        Pin::new(&mut self.stdout).poll_write(cx, buf)
+    }
+
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), std::io::Error>> {
+        Pin::new(&mut self.stdout).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), std::io::Error>> {
+        Pin::new(&mut self.stdout).poll_shutdown(cx)
     }
 }

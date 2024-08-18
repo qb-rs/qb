@@ -9,7 +9,7 @@ pub mod wrapper;
 use std::{ffi::OsString, path::Path};
 
 use thiserror::Error;
-use tracing::warn;
+use tracing::{debug, warn};
 
 use table::QBFileTable;
 use tree::{QBFileTree, TreeFile};
@@ -129,7 +129,7 @@ impl QBFS {
         let devices = wrapper.dload(INTERNAL_DEVICES.as_ref()).await;
         let changelog = wrapper.dload(INTERNAL_CHANGEMAP.as_ref()).await;
 
-        println!("loaded {}", ignore);
+        debug!("loaded {}", ignore);
 
         Self {
             wrapper,

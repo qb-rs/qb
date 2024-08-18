@@ -4,6 +4,7 @@
 //! which handles controlling tasks and processes the control
 //! requests sent by those. It manages the [master].
 
+use core::fmt;
 use qb_core::{fs::wrapper::QBFSWrapper, path::qbpaths::INTERNAL_CONFIG};
 use std::{
     collections::{HashMap, HashSet},
@@ -87,9 +88,12 @@ impl QBCHandle {
     }
 }
 
-struct HandleInit {
+struct HandleInit<T>
+where
+    T: qb_proto::ReadWrite + fmt::Debug + Send + 'static,
+{
     id: QBCId,
-    conn: Stream,
+    conn: T,
     tx: mpsc::Sender<(QBCId, QBCRequest)>,
     rx: mpsc::Receiver<QBCResponse>,
 }
@@ -345,7 +349,10 @@ impl QBDaemon {
     }
 
     /// Initialize a handle
-    pub async fn init_handle(&mut self, conn: Stream) {
+    pub async fn init_handle<T>(&mut self, conn: T)
+    where
+        T: qb_proto::ReadWrite + fmt::Debug + Send + 'static,
+    {
         let id = QBCId::generate();
         let (resp_tx, resp_rx) = mpsc::channel::<QBCResponse>(10);
         self.handles.insert(id.clone(), QBCHandle { tx: resp_tx });
@@ -361,7 +368,10 @@ impl QBDaemon {
     }
 }
 
-async fn handle_run(mut init: HandleInit) {
+async fn handle_run<T>(mut init: HandleInit<T>)
+where
+    T: qb_proto::ReadWrite + fmt::Debug + Send + 'static,
+{
     let span = info_span!("handle", id = init.id.to_hex());
 
     match _handle_run(&mut init).instrument(span.clone()).await {
@@ -370,7 +380,10 @@ async fn handle_run(mut init: HandleInit) {
     }
 }
 
-async fn _handle_run(init: &mut HandleInit) -> Result<()> {
+async fn _handle_run<T>(init: &mut HandleInit<T>) -> Result<()>
+where
+    T: qb_proto::ReadWrite + fmt::Debug + Send + 'static,
+{
     trace!("create new handle with id={} conn={:?}", init.id, init.conn);
 
     let mut protocol = QBP::default();

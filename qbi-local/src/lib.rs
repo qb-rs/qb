@@ -124,7 +124,7 @@ impl Runner {
                 // save the changes applied
                 self.fs.save().await.unwrap();
             }
-            QBIMessage::Broadcast { msg } => println!("BROADCAST: {}", msg),
+            QBIMessage::Broadcast { msg } => debug!("BROADCAST: {}", msg),
             val => warn!("unexpected message: {}", val),
         }
     }
