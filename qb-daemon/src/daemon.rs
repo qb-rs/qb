@@ -15,7 +15,6 @@ use std::{
 use tokio::{sync::mpsc, task::JoinSet};
 
 use bitcode::{Decode, Encode};
-use interprocess::local_socket::tokio::Stream;
 use qb_ext::{
     control::{QBCId, QBCRequest, QBCResponse},
     interface::{QBIContext, QBIId, QBISetup},
