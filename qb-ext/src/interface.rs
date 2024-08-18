@@ -16,61 +16,17 @@
 //! TODO: external interfaces
 
 use bitcode::{Decode, Encode};
-use hex::FromHexError;
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::future::Future;
 
+use crate::QBExtId;
 use qb_core::{change::QBChangeMap, device::QBDeviceId, time::QBTimeStampUnique};
 
-use crate::QBChannel;
+use crate::QBExtChannel;
 
 /// Communicate from the interface to the master
-pub type QBIChannel = QBChannel<QBIId, QBISlaveMessage, QBIHostMessage>;
-
-/// An identifier for an interface.
-#[derive(Encode, Decode, Serialize, Deserialize, Hash, Clone, Eq, PartialEq)]
-pub struct QBIId {
-    /// The nonce of this Id
-    pub nonce: u64,
-}
-
-impl fmt::Display for QBIId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_hex())
-    }
-}
-
-impl fmt::Debug for QBIId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "QBIId({})", self.to_hex())
-    }
-}
-
-impl QBIId {
-    /// Generate a QBIId for a QBI which operates on the device with the given device_id.
-    pub fn generate() -> Self {
-        let mut rng = rand::thread_rng();
-        Self {
-            nonce: rng.gen::<u64>(),
-        }
-    }
-
-    /// Get the string representation of this id in hex format
-    pub fn to_hex(&self) -> String {
-        hex::encode(self.nonce.to_be_bytes())
-    }
-
-    /// Decode a hexadecimal string to an id
-    pub fn from_hex(hex: impl AsRef<str>) -> Result<Self, FromHexError> {
-        let mut bytes = [0u8; 8];
-        hex::decode_to_slice(hex.as_ref(), &mut bytes)?;
-        Ok(Self {
-            nonce: u64::from_be_bytes(bytes),
-        })
-    }
-}
+pub type QBIChannel = QBExtChannel<QBExtId, QBISlaveMessage, QBIHostMessage>;
 
 /// A message
 /// this is the struct that is used internally

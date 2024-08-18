@@ -8,7 +8,7 @@
 
 use std::fmt;
 
-use crate::interface::QBIId;
+use crate::QBExtId;
 use bitcode::{Decode, Encode};
 use hex::FromHexError;
 
@@ -57,29 +57,29 @@ impl QBCId {
 /// A request comming from a controlling task.
 #[derive(Encode, Decode, Serialize, Deserialize)]
 pub enum QBCRequest {
-    /// Add a new interface.
+    /// Add a new interface or hook.
     Add {
         /// The name of the interface kind ("gdrive", "local", ...)
         name: String,
         /// The setup blob
         blob: QBPBlob,
     },
-    /// Remove an interface
+    /// Remove an interface or hook.
     Remove {
         /// the identifier
-        id: QBIId,
+        id: QBExtId,
     },
-    /// Start an existing interface.
+    /// Start an existing interface or hook.
     Start {
         /// the identifier
-        id: QBIId,
+        id: QBExtId,
     },
-    /// Stop an existing interface.
+    /// Stop an existing interface or hook.
     Stop {
         /// the identifier
-        id: QBIId,
+        id: QBExtId,
     },
-    /// List the available interfaces.
+    /// List the available interfaces and hooks.
     List,
 }
 
@@ -121,8 +121,8 @@ pub enum QBCResponse {
     },
     /// Response for the list request.
     List {
-        /// the available interfaces
-        list: Vec<(QBIId, String, bool)>,
+        /// the available interfaces and hooks
+        list: Vec<(QBExtId, String, String)>,
     },
     /// Generic success request.
     Success,
@@ -140,11 +140,7 @@ impl fmt::Display for QBCResponse {
             QBCResponse::List { list } => {
                 write!(f, "QBC_MSG_RESP_LIST:")?;
                 for entry in list {
-                    write!(f, "\n{} - {}", entry.0, entry.1)?;
-
-                    if entry.2 {
-                        write!(f, " - attached")?;
-                    }
+                    write!(f, "\n{} - {} - {}", entry.0, entry.1, entry.2)?;
                 }
 
                 Ok(())

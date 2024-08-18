@@ -6,22 +6,18 @@
 //!
 //! TODO: switch to mutex instead of using messaging
 
-use core::fmt;
 use std::{any::Any, future::Future, marker::PhantomData};
 
-use bitcode::{Decode, Encode};
-use hex::FromHexError;
-use rand::Rng;
-use serde::{Deserialize, Serialize};
+use crate::QBExtId;
 
-use crate::{interface::QBIContext, QBChannel};
+use crate::{interface::QBIContext, QBExtChannel};
 
 /// Communicate from the interface to the master
-pub type QBHChannel = QBChannel<QBHId, QBHSlaveMessage, QBHHostMessage>;
+pub type QBHChannel = QBExtChannel<QBExtId, QBHSlaveMessage, QBHHostMessage>;
 
 /// TODO: figure out what to call this
 pub struct QBHInit<T: QBIContext + Any + Send> {
-    channel: QBHChannel,
+    pub channel: QBHChannel,
     _t: PhantomData<T>,
 }
 
@@ -44,49 +40,6 @@ impl<T: QBIContext + Any + Send> From<QBHChannel> for QBHInit<T> {
     }
 }
 
-/// An identifier for a hook.
-#[derive(Encode, Decode, Serialize, Deserialize, Hash, Clone, Eq, PartialEq)]
-pub struct QBHId {
-    /// The nonce of this Id
-    pub nonce: u64,
-}
-
-impl fmt::Display for QBHId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_hex())
-    }
-}
-
-impl fmt::Debug for QBHId {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "QBHId({})", self.to_hex())
-    }
-}
-
-impl QBHId {
-    /// Generate a QBIId for a QBI which operates on the device with the given device_id.
-    pub fn generate() -> Self {
-        let mut rng = rand::thread_rng();
-        Self {
-            nonce: rng.gen::<u64>(),
-        }
-    }
-
-    /// Get the string representation of this id in hex format
-    pub fn to_hex(&self) -> String {
-        hex::encode(self.nonce.to_be_bytes())
-    }
-
-    /// Decode a hexadecimal string to an id
-    pub fn from_hex(hex: impl AsRef<str>) -> Result<Self, FromHexError> {
-        let mut bytes = [0u8; 8];
-        hex::decode_to_slice(hex.as_ref(), &mut bytes)?;
-        Ok(Self {
-            nonce: u64::from_be_bytes(bytes),
-        })
-    }
-}
-
 pub enum QBHHostMessage {
     Stop,
 }
@@ -96,6 +49,12 @@ pub enum QBHSlaveMessage {
 }
 
 /// A context which yields interfaces.
-pub trait QBHContext<T: QBIContext + Any + Send> {
-    fn run(self, init: QBHInit<T>) -> impl Future<Output = ()> + Send + 'static;
+pub trait QBHContext<I: QBIContext + Any + Send> {
+    fn run(self, init: QBHInit<I>) -> impl Future<Output = ()> + Send + 'static;
+}
+
+/// TODO: doc
+pub trait QBHSetup<H: QBHContext<I>, I: QBIContext + Any + Send> {
+    /// Setup this kind of QBI.
+    fn setup(self) -> impl Future<Output = H> + Send + 'static;
 }

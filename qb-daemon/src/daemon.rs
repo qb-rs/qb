@@ -7,6 +7,7 @@
 use core::fmt;
 use qb_core::{fs::wrapper::QBFSWrapper, path::qbpaths::INTERNAL_CONFIG};
 use std::{
+    any::Any,
     collections::{HashMap, HashSet},
     future::Future,
     pin::Pin,
@@ -17,7 +18,9 @@ use tokio::{sync::mpsc, task::JoinSet};
 use bitcode::{Decode, Encode};
 use qb_ext::{
     control::{QBCId, QBCRequest, QBCResponse},
-    interface::{QBIContext, QBIId, QBISetup},
+    hook::{QBHContext, QBHSetup},
+    interface::{QBIContext, QBISetup},
+    QBExtId,
 };
 use qb_proto::{QBPBlob, QBPDeserialize, QBP};
 use thiserror::Error;
@@ -54,20 +57,20 @@ pub enum Error {
 pub type Result<T> = std::result::Result<T, Error>;
 
 /// Function pointer to a function which starts an interface.
-pub type QBIStartFn = Box<
+pub type QBExtStartFn = Box<
     dyn for<'a> Fn(
         &'a mut QBMaster,
-        QBIId,
+        QBExtId,
         &'a [u8],
     ) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>>,
 >;
 /// Function pointer to a function which sets up an interface.
-pub type QBISetupFn = Box<dyn Fn(&mut SetupQueue, QBCId, String, QBPBlob)>;
+pub type QBExtSetupFn = Box<dyn Fn(&mut SetupQueue, QBCId, String, QBPBlob)>;
 
 /// A struct which can be stored persistently that describes how to
-/// start a specific interface using its kind's name and a data payload.
+/// start a specific extension using its kind's name and a data payload.
 #[derive(Encode, Decode)]
-pub struct QBIDescriptior {
+pub struct QBExtDescriptor {
     name: String,
     data: Vec<u8>,
 }
@@ -100,8 +103,8 @@ where
 /// A struct which can be stored persistently to configure a daemon.
 #[derive(Encode, Decode, Default)]
 pub struct QBDaemonConfig {
-    qbi_table: HashMap<QBIId, QBIDescriptior>,
-    autostart: HashSet<QBIId>,
+    ext_table: HashMap<QBExtId, QBExtDescriptor>,
+    ext_autostart: HashSet<QBExtId>,
 }
 
 impl QBDaemonConfig {
@@ -109,25 +112,20 @@ impl QBDaemonConfig {
     ///
     /// Returns Error::NotFound if the interface does not
     /// exist in this table.
-    pub fn get(&self, id: &QBIId) -> Result<&QBIDescriptior> {
-        self.qbi_table.get(id).ok_or(Error::NotFound)
-    }
-
-    /// Insert a new interface into this table.
-    pub fn insert(&mut self, id: QBIId, descriptor: QBIDescriptior) {
-        self.qbi_table.insert(id, descriptor);
+    pub fn get(&self, id: &QBExtId) -> Result<&QBExtDescriptor> {
+        self.ext_table.get(id).ok_or(Error::NotFound)
     }
 }
 
 /// TODO: doc
 #[derive(Default)]
 pub struct SetupQueue {
-    join_set: JoinSet<(QBCId, Result<QBIDescriptior>)>,
+    join_set: JoinSet<(QBCId, Result<QBExtDescriptor>)>,
 }
 
 impl SetupQueue {
     /// TODO: doc
-    pub async fn join(&mut self) -> (QBCId, Result<QBIDescriptior>) {
+    pub async fn join(&mut self) -> (QBCId, Result<QBExtDescriptor>) {
         loop {
             match self.join_set.join_next().await {
                 Some(Ok(val)) => return val,
@@ -145,14 +143,15 @@ pub struct QBDaemon {
     pub master: QBMaster,
     // "available QBIs" -> could be "attached" or "detached"
     // => every QBI that is attached to the master must be in this map
-    start_fns: HashMap<String, QBIStartFn>,
-    setup_fns: HashMap<String, QBISetupFn>,
+    start_fns: HashMap<String, QBExtStartFn>,
+    setup_fns: HashMap<String, QBExtSetupFn>,
     config: QBDaemonConfig,
     wrapper: QBFSWrapper,
 
     /// TODO: doc
     pub setup: SetupQueue,
 
+    // control stuff
     req_tx: mpsc::Sender<(QBCId, QBCRequest)>,
     /// A channel for receiving messages from controlling tasks
     pub req_rx: mpsc::Receiver<(QBCId, QBCRequest)>,
@@ -180,14 +179,19 @@ impl QBDaemon {
     /// Start all available interfaces
     pub async fn autostart(&mut self) {
         // autostart
-        let ids = self.config.autostart.iter().cloned().collect::<Vec<_>>();
+        let ids = self
+            .config
+            .ext_autostart
+            .iter()
+            .cloned()
+            .collect::<Vec<_>>();
         for id in ids {
             self.start(id).await.unwrap();
         }
     }
 
     /// Process the result of the setup queue.
-    pub async fn process_setup(&mut self, (id, maybe_setup): (QBCId, Result<QBIDescriptior>)) {
+    pub async fn process_setup(&mut self, (id, maybe_setup): (QBCId, Result<QBExtDescriptor>)) {
         match maybe_setup {
             Ok(val) => {
                 // success: add the descriptor to this daemon
@@ -216,8 +220,8 @@ impl QBDaemon {
     }
 
     /// Start an interface by the given id.
-    pub async fn start(&mut self, id: QBIId) -> Result<()> {
-        self.config.autostart.insert(id.clone());
+    pub async fn start(&mut self, id: QBExtId) -> Result<()> {
+        self.config.ext_autostart.insert(id.clone());
         self.save().await;
         let descriptor = self.config.get(&id)?;
         let name = &descriptor.name;
@@ -227,10 +231,10 @@ impl QBDaemon {
     }
 
     /// Stop an interface by the given id.
-    pub async fn stop(&mut self, id: QBIId) -> Result<()> {
-        self.config.autostart.remove(&id);
+    pub async fn stop(&mut self, id: QBExtId) -> Result<()> {
+        self.config.ext_autostart.remove(&id);
         self.save().await;
-        self.master.detach(&id).await?.await?;
+        self.master.stop(&id).await?.await?;
         Ok(())
     }
 
@@ -242,42 +246,49 @@ impl QBDaemon {
     }
 
     /// Add an interface that has already been setup.
-    pub async fn add_already_setup(&mut self, descriptor: QBIDescriptior) -> Result<()> {
-        let id = QBIId::generate();
-        self.config.insert(id.clone(), descriptor);
+    pub async fn add_already_setup(&mut self, descriptor: QBExtDescriptor) -> Result<()> {
+        let id = QBExtId::generate();
+        self.config.ext_table.insert(id.clone(), descriptor);
         self.save().await;
         self.start(id).await?;
         Ok(())
     }
 
     /// Remove an interface
-    pub async fn remove(&mut self, id: &QBIId) -> Result<()> {
-        self.config.autostart.remove(&id);
+    pub async fn remove(&mut self, id: &QBExtId) -> Result<()> {
+        self.config.ext_autostart.remove(&id);
         if self.master.is_attached(&id) {
             self.master.detach(&id).await?.await?
         }
-        self.config.qbi_table.remove(&id);
+        self.config.ext_table.remove(&id);
         self.save().await;
         Ok(())
     }
 
     /// List the QBIs.
-    pub fn list(&self) -> Vec<(QBIId, String, bool)> {
+    pub fn list(&self) -> Vec<(QBExtId, String, String)> {
         self.config
-            .qbi_table
+            .ext_table
             .iter()
             .map(|(id, descriptor)| {
-                (
-                    id.clone(),
-                    descriptor.name.clone(),
-                    self.master.is_attached(id),
-                )
+                let mut desc = match () {
+                    _ if self.master.is_attached(id) => "attached",
+                    _ if self.master.is_hooked(id) => "hooked",
+                    _ => "not active",
+                }
+                .into();
+
+                if self.config.ext_autostart.contains(id) {
+                    desc += " - autostart";
+                }
+
+                (id.clone(), descriptor.name.clone(), desc)
             })
             .collect()
     }
 
-    /// Register a QBI kind.
-    pub fn register<S, I>(&mut self, name: impl Into<String>)
+    /// Register an interface kind.
+    pub fn register_qbi<S, I>(&mut self, name: impl Into<String>)
     where
         S: QBISetup<I> + QBPDeserialize,
         I: QBIContext + Encode + for<'a> Decode<'a> + 'static,
@@ -296,12 +307,47 @@ impl QBDaemon {
             name,
             Box::new(move |setup, caller, name, blob| {
                 setup.join_set.spawn(async move {
-                    let maybe_setup: Result<QBIDescriptior> = async move {
+                    let maybe_setup: Result<QBExtDescriptor> = async move {
                         let span = info_span!("qbi-setup", name);
                         let setup = blob.deserialize::<S>()?;
                         let cx = setup.setup().instrument(span).await;
                         let data = bitcode::encode(&cx);
-                        Ok(QBIDescriptior { name, data })
+                        Ok(QBExtDescriptor { name, data })
+                    }
+                    .await;
+                    (caller, maybe_setup)
+                });
+            }),
+        );
+    }
+
+    /// Register an interface kind.
+    pub fn register_qbh<S, H, I>(&mut self, name: impl Into<String>)
+    where
+        S: QBHSetup<H, I> + QBPDeserialize,
+        H: QBHContext<I> + Encode + for<'a> Decode<'a> + 'static,
+        I: QBIContext + Any + Send,
+    {
+        let name = name.into();
+        self.start_fns.insert(
+            name.clone(),
+            Box::new(move |qb, id, data| {
+                Box::pin(async move {
+                    qb.hook(id, bitcode::decode::<H>(&data).unwrap()).await?;
+                    Ok(())
+                })
+            }),
+        );
+        self.setup_fns.insert(
+            name,
+            Box::new(move |setup, caller, name, blob| {
+                setup.join_set.spawn(async move {
+                    let maybe_setup: Result<QBExtDescriptor> = async move {
+                        let span = info_span!("qbi-setup", name);
+                        let setup = blob.deserialize::<S>()?;
+                        let cx = setup.setup().instrument(span).await;
+                        let data = bitcode::encode(&cx);
+                        Ok(QBExtDescriptor { name, data })
                     }
                     .await;
                     (caller, maybe_setup)

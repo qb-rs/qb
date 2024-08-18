@@ -13,8 +13,9 @@ use qb_core::{
     path::qbpaths::{INTERNAL_CHANGEMAP, INTERNAL_DEVICES},
 };
 use qb_ext::{
-    hook::{QBHChannel, QBHContext, QBHHostMessage, QBHId, QBHSlaveMessage},
-    interface::{QBIChannel, QBIContext, QBIHostMessage, QBIId, QBIMessage, QBISlaveMessage},
+    hook::{QBHChannel, QBHContext, QBHHostMessage, QBHSlaveMessage},
+    interface::{QBIChannel, QBIContext, QBIHostMessage, QBIMessage, QBISlaveMessage},
+    QBExtId,
 };
 use thiserror::Error;
 use tokio::{sync::mpsc, task::JoinHandle};
@@ -84,14 +85,16 @@ pub type QBHHandlerFn = Rc<
 /// The master, that is, the struct that houses connection
 /// to the individual interfaces and manages communication.
 pub struct QBMaster {
-    interfaces: HashMap<QBIId, QBIHandle>,
+    qbi_handles: HashMap<QBExtId, QBIHandle>,
     /// Receiver for messages coming from interfaces.
-    pub interface_rx: mpsc::Receiver<(QBIId, QBISlaveMessage)>,
-    interface_tx: mpsc::Sender<(QBIId, QBISlaveMessage)>,
-    hooks: HashMap<QBHId, QBHHandle>,
+    pub qbi_rx: mpsc::Receiver<(QBExtId, QBISlaveMessage)>,
+    qbi_tx: mpsc::Sender<(QBExtId, QBISlaveMessage)>,
+
+    qbh_handles: HashMap<QBExtId, QBHHandle>,
     /// Receiver for messages coming from hooks.
-    pub hook_rx: mpsc::Receiver<(QBHId, QBHSlaveMessage)>,
-    hook_tx: mpsc::Sender<(QBHId, QBHSlaveMessage)>,
+    pub qbh_rx: mpsc::Receiver<(QBExtId, QBHSlaveMessage)>,
+    qbh_tx: mpsc::Sender<(QBExtId, QBHSlaveMessage)>,
+
     devices: QBDeviceTable,
     changemap: QBChangeMap,
     wrapper: QBFSWrapper,
@@ -111,12 +114,12 @@ impl QBMaster {
         let changemap = wrapper.dload(INTERNAL_CHANGEMAP.as_ref()).await;
 
         QBMaster {
-            interfaces: HashMap::new(),
-            interface_rx,
-            interface_tx,
-            hooks: HashMap::new(),
-            hook_rx,
-            hook_tx,
+            qbi_handles: HashMap::new(),
+            qbi_rx: interface_rx,
+            qbi_tx: interface_tx,
+            qbh_handles: HashMap::new(),
+            qbh_rx: hook_rx,
+            qbh_tx: hook_tx,
             devices,
             changemap,
             wrapper,
@@ -139,8 +142,8 @@ impl QBMaster {
     ///
     /// # Cancelation Safety
     /// This method is not cancelation safe.
-    pub async fn hprocess(&mut self, (id, msg): (QBHId, QBHSlaveMessage)) {
-        let handle = self.hooks.get(&id).unwrap();
+    pub async fn hprocess(&mut self, (id, msg): (QBExtId, QBHSlaveMessage)) {
+        let handle = self.qbh_handles.get(&id).unwrap();
         let handler_fn = handle.handler_fn.clone();
         handler_fn(self, msg).await;
     }
@@ -148,13 +151,13 @@ impl QBMaster {
     /// Remove unused handles [from interfaces that have finished]
     fn iclean_handles(&mut self) {
         let to_remove = self
-            .interfaces
+            .qbi_handles
             .iter()
             .filter(|(_, v)| v.join_handle.is_finished())
             .map(|(k, _)| k.clone())
             .collect::<Vec<_>>();
         for id in to_remove {
-            self.interfaces.remove(&id);
+            self.qbi_handles.remove(&id);
         }
     }
 
@@ -162,7 +165,7 @@ impl QBMaster {
     ///
     /// # Cancelation Safety
     /// This method is not cancelation safe.
-    pub async fn iprocess(&mut self, (id, msg): (QBIId, QBISlaveMessage)) {
+    pub async fn iprocess(&mut self, (id, msg): (QBExtId, QBISlaveMessage)) {
         self.iclean_handles();
 
         let mut broadcast = Vec::new();
@@ -174,7 +177,7 @@ impl QBMaster {
 
         let span = info_span!("qbi-process", id = id.to_hex());
         let _guard = span.enter();
-        let handle = self.interfaces.get_mut(&id).unwrap();
+        let handle = self.qbi_handles.get_mut(&id).unwrap();
 
         debug!("recv: {}", msg);
 
@@ -265,7 +268,7 @@ impl QBMaster {
 
         // send the broadcast messages
         for msg in broadcast {
-            for handle in self.interfaces.values_mut() {
+            for handle in self.qbi_handles.values_mut() {
                 let msg = QBIMessage::Broadcast { msg: msg.clone() }.into();
                 handle.tx.send(msg).await.unwrap();
             }
@@ -275,7 +278,7 @@ impl QBMaster {
     /// Try to hook a hook to the master. Returns error if already hooked.
     pub async fn hook<T: QBIContext + 'static>(
         &mut self,
-        id: QBHId,
+        id: QBExtId,
         cx: impl QBHContext<T>,
     ) -> Result<()> {
         let span = info_span!("qb-hook", id = id.to_hex());
@@ -295,25 +298,25 @@ impl QBMaster {
                         QBHSlaveMessage::Attach { context } => {
                             // downcast the context
                             let context = *context.downcast::<T>().unwrap();
-                            master.attach(QBIId::generate(), context).await.unwrap();
+                            master.attach(QBExtId::generate(), context).await.unwrap();
                         }
                     }
                 })
             })),
             join_handle: tokio::spawn(
-                cx.run(QBHChannel::new(id.clone(), self.hook_tx.clone(), master_rx).into())
+                cx.run(QBHChannel::new(id.clone(), self.qbh_tx.clone(), master_rx).into())
                     .instrument(span),
             ),
             tx: master_tx,
         };
 
-        self.hooks.insert(id.clone(), handle);
+        self.qbh_handles.insert(id.clone(), handle);
 
         Ok(())
     }
 
     /// Try to attach an interface to the master. Returns error if already attached.
-    pub async fn attach(&mut self, id: QBIId, cx: impl QBIContext) -> Result<()> {
+    pub async fn attach(&mut self, id: QBExtId, cx: impl QBIContext) -> Result<()> {
         let span = info_span!("qb-interface", id = id.to_hex());
 
         // make sure we do not attach an interface twice
@@ -328,7 +331,7 @@ impl QBMaster {
             join_handle: tokio::spawn(
                 cx.run(
                     self.devices.host_id.clone(),
-                    QBIChannel::new(id.clone(), self.interface_tx.clone(), master_rx),
+                    QBIChannel::new(id.clone(), self.qbi_tx.clone(), master_rx),
                 )
                 .instrument(span),
             ),
@@ -336,43 +339,56 @@ impl QBMaster {
             state: QBIState::Init,
         };
 
-        self.interfaces.insert(id.clone(), handle);
+        self.qbi_handles.insert(id.clone(), handle);
 
         Ok(())
     }
 
     /// Returns whether an interface with the given id is attached to the master.
     #[inline(always)]
-    pub fn is_attached(&self, id: &QBIId) -> bool {
-        self.interfaces.contains_key(id)
+    pub fn is_attached(&self, id: &QBExtId) -> bool {
+        self.qbi_handles.contains_key(id)
     }
 
     /// Returns whether an interface with the given id is attached to the master.
     #[inline(always)]
-    pub fn is_hooked(&self, id: &QBHId) -> bool {
-        self.hooks.contains_key(id)
+    pub fn is_hooked(&self, id: &QBExtId) -> bool {
+        self.qbh_handles.contains_key(id)
     }
 
     /// Detach the given interface and return a join handle.
-    pub async fn detach(&mut self, id: &QBIId) -> Result<JoinHandle<()>> {
-        let handle = self.interfaces.remove(id).ok_or(Error::NotFound)?;
+    pub async fn detach(&mut self, id: &QBExtId) -> Result<JoinHandle<()>> {
+        let handle = self.qbi_handles.remove(id).ok_or(Error::NotFound)?;
         handle.tx.send(QBIHostMessage::Stop).await.unwrap();
 
         Ok(handle.join_handle)
     }
 
     /// Detach the given hook and return a join handle.
-    pub async fn unhook(&mut self, id: &QBHId) -> Result<JoinHandle<()>> {
-        let handle = self.hooks.remove(id).ok_or(Error::NotFound)?;
+    pub async fn unhook(&mut self, id: &QBExtId) -> Result<JoinHandle<()>> {
+        let handle = self.qbh_handles.remove(id).ok_or(Error::NotFound)?;
         handle.tx.send(QBHHostMessage::Stop).await.unwrap();
 
         Ok(handle.join_handle)
     }
 
+    /// Stop an interface or hook with the given id.
+    pub async fn stop(&mut self, id: &QBExtId) -> Result<JoinHandle<()>> {
+        if self.is_attached(id) {
+            return self.detach(id).await;
+        }
+
+        if self.is_hooked(id) {
+            return self.unhook(id).await;
+        }
+
+        Err(Error::NotFound)
+    }
+
     /// Returns whether an interface with the given id is detached from the master.
     #[inline(always)]
-    pub fn is_detached(&self, id: &QBIId) -> bool {
-        self.interfaces.contains_key(id)
+    pub fn is_detached(&self, id: &QBExtId) -> bool {
+        self.qbi_handles.contains_key(id)
     }
 
     /// Synchronize changes across all interfaces.
@@ -380,7 +396,7 @@ impl QBMaster {
     /// # Cancelation safety
     /// This method is not cancelation safe.
     pub async fn sync(&mut self) {
-        for (id, handle) in self.interfaces.iter_mut() {
+        for (id, handle) in self.qbi_handles.iter_mut() {
             // skip uninitialized
             if let QBIState::Available {
                 ref device_id,
@@ -417,8 +433,8 @@ impl QBMaster {
     /// Send a message to an interface with the given id.
     ///
     /// This is expected to never fail.
-    pub async fn send(&self, id: &QBIId, msg: impl Into<QBIHostMessage>) {
-        let handle = self.interfaces.get(id).unwrap();
+    pub async fn send(&self, id: &QBExtId, msg: impl Into<QBIHostMessage>) {
+        let handle = self.qbi_handles.get(id).unwrap();
         handle.tx.send(msg.into()).await.unwrap()
     }
 }

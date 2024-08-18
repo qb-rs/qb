@@ -17,9 +17,8 @@ use interprocess::local_socket::{
 };
 use master::QBMaster;
 use qb_core::fs::wrapper::QBFSWrapper;
-use qb_ext::hook::QBHId;
 use qbi_local::QBILocal;
-use qbi_tcp::{QBHTCPServer, QBITCPClient};
+use qbi_tcp::{server::QBHTCPServerSetup, QBHTCPServer, QBITCPClient, QBITCPServer};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tracing::{info, level_filters::LevelFilter};
 use tracing_panic::panic_hook;
@@ -98,16 +97,13 @@ async fn main() {
 
     let wrapper = QBFSWrapper::new(args.path);
     // Initialize the master
-    let mut master = QBMaster::init(wrapper.clone()).await;
-
-    // TODO: persistent hook
-    let hook = QBHTCPServer::listen(6969, b"").await;
-    master.hook(QBHId::generate(), hook).await.unwrap();
+    let master = QBMaster::init(wrapper.clone()).await;
 
     // Initialize the daemon
     let mut daemon = QBDaemon::init(master, wrapper).await;
-    daemon.register::<QBILocal, QBILocal>("local");
-    daemon.register::<QBITCPClient, QBITCPClient>("tcp");
+    daemon.register_qbi::<QBILocal, QBILocal>("local");
+    daemon.register_qbi::<QBITCPClient, QBITCPClient>("tcp");
+    daemon.register_qbh::<QBHTCPServerSetup, QBHTCPServer, QBITCPServer>("tcp-server");
     daemon.autostart().await;
 
     if stdio_bind {
@@ -120,9 +116,9 @@ async fn main() {
             Some(socket) => {
                 tokio::select! {
                     // process interfaces
-                    Some(v) = daemon.master.interface_rx.recv() => daemon.master.iprocess(v).await,
+                    Some(v) = daemon.master.qbi_rx.recv() => daemon.master.iprocess(v).await,
                     // process hooks
-                    Some(v) = daemon.master.hook_rx.recv() => daemon.master.hprocess(v).await,
+                    Some(v) = daemon.master.qbh_rx.recv() => daemon.master.hprocess(v).await,
                     // process control messages
                     Some(v) = daemon.req_rx.recv() => daemon.process(v).await,
                     // process daemon socket
@@ -134,9 +130,9 @@ async fn main() {
             None => {
                 tokio::select! {
                     // process interfaces
-                    Some(v) = daemon.master.interface_rx.recv() => daemon.master.iprocess(v).await,
+                    Some(v) = daemon.master.qbi_rx.recv() => daemon.master.iprocess(v).await,
                     // process hooks
-                    Some(v) = daemon.master.hook_rx.recv() => daemon.master.hprocess(v).await,
+                    Some(v) = daemon.master.qbh_rx.recv() => daemon.master.hprocess(v).await,
                     // process control messages
                     Some(v) = daemon.req_rx.recv() => daemon.process(v).await,
                     // process daemon setup queue

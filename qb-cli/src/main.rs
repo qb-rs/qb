@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 use interprocess::local_socket::{traits::tokio::Stream, GenericNamespaced, ToNsName};
 use qb_ext::{
     control::{QBCRequest, QBCResponse},
-    interface::QBIId,
+    QBExtId,
 };
 use qb_proto::{QBPBlob, QBP};
 use tokio::io::AsyncReadExt;
@@ -38,24 +38,24 @@ enum Commands {
     Remove {
         /// the id of the interface in hex format
         #[arg(value_parser=parse_id)]
-        id: QBIId,
+        id: QBExtId,
     },
     /// Start an interface
     Start {
         /// the id of the interface in hex format
         #[arg(value_parser=parse_id)]
-        id: QBIId,
+        id: QBExtId,
     },
     /// Stop an interface
     Stop {
         /// the id of the interface in hex format
         #[arg(value_parser=parse_id)]
-        id: QBIId,
+        id: QBExtId,
     },
 }
 
-fn parse_id(s: &str) -> Result<QBIId, String> {
-    QBIId::from_hex(s).map_err(|e| e.to_string())
+fn parse_id(s: &str) -> Result<QBExtId, String> {
+    QBExtId::from_hex(s).map_err(|e| e.to_string())
 }
 
 #[tokio::main(flavor = "current_thread")]
