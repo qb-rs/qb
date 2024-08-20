@@ -20,7 +20,7 @@ $ cargo install --path qb-cli
 # Make sure that ~/.cargo/bin is in $PATH
 $ qb-cli <args>
 ```
-- Manually building
+- Build manually
 ```sh
 # In the project root directory
 $ cargo build --release --bin qb-cli
