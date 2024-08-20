@@ -26,7 +26,7 @@ $ cargo install --path qb-daemon
 # Make sure that ~/.cargo/bin is in $PATH
 $ qb-daemon <args>
 ```
-- Manually building
+- Build manually
 ```sh
 # In the project root directory
 $ cargo build --release --bin qb-daemon
