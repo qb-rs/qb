@@ -1,0 +1,114 @@
+<mxfile host="Electron" modified="2024-08-20T10:33:35.919Z" agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/24.5.3 Chrome/124.0.6367.207 Electron/30.0.6 Safari/537.36" etag="Y19U98YOS5QQV3ccpezU" version="24.5.3" type="device">
+  <diagram name="Page-1" id="HXCr5Ru2nn6dtwMlLs1M">
+    <mxGraphModel dx="819" dy="518" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="850" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="w35PViAqEVXVMyv1GmmO-1" value="Application Service" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="40" y="160" width="240" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-2" value="Application" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="360" y="160" width="240" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-3" value="binds to" style="shape=flexArrow;endArrow=classic;html=1;rounded=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;exitX=0;exitY=0.5;exitDx=0;exitDy=0;" parent="1" source="w35PViAqEVXVMyv1GmmO-2" target="w35PViAqEVXVMyv1GmmO-1" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="300" y="250" as="sourcePoint" />
+            <mxPoint x="350" y="200" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-4" value="QuixByte Daemon (Rust)&lt;div&gt;Communicate over STDIN/STDOUT&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="40" y="200" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-5" value="Android Documents Interface&lt;div&gt;Bind to UDS of qbi-android (rust)&lt;/div&gt;&lt;div&gt;Notify qbi-android on change&lt;/div&gt;&lt;div&gt;Expose Documents via SAF&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="40" y="280" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-6" value="UI/UX" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="360" y="200" width="240" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-8" value="&lt;h1 style=&quot;margin-top: 0px;&quot;&gt;Android Application Structure&lt;/h1&gt;&lt;p&gt;This schematic describes the structure of the Android Application. The same procedure has to be done for iOS as well.&lt;/p&gt;" style="text;html=1;whiteSpace=wrap;overflow=hidden;rounded=0;" parent="1" vertex="1">
+          <mxGeometry x="40" y="40" width="350" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-9" value="fetch files&lt;div&gt;from directory&lt;/div&gt;" style="shape=flexArrow;endArrow=classic;html=1;rounded=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" parent="1" target="w35PViAqEVXVMyv1GmmO-5" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="360" y="180" as="sourcePoint" />
+            <mxPoint x="360" y="320" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-10" value="Daemon" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="40" y="480" width="320" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-11" value="Master" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="40" y="520" width="240" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-12" value="Start/Stop&lt;div&gt;Add/Remove&lt;/div&gt;&lt;div&gt;Hooks &amp;amp; Interfaces&lt;/div&gt;" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="280" y="520" width="80" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-13" value="qbi-android" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="40" y="560" width="240" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-18" value="Application Service" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="40" y="440" width="560" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-19" value="Android Documents Interface" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="360" y="480" width="240" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-23" value="UDS" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="40" y="600" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-24" value="Files" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="160" y="600" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-25" value="SAF" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="360" y="520" width="240" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-27" value="" style="endArrow=classic;html=1;rounded=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" parent="1" source="w35PViAqEVXVMyv1GmmO-28" target="w35PViAqEVXVMyv1GmmO-24" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="480" y="610" as="sourcePoint" />
+            <mxPoint x="200" y="680" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="420" y="680" />
+              <mxPoint x="220" y="680" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-28" value="Query" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="360" y="560" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-29" value="Update" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="480" y="560" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-30" value="" style="endArrow=classic;html=1;rounded=0;entryX=0.5;entryY=1;entryDx=0;entryDy=0;exitX=0.5;exitY=1;exitDx=0;exitDy=0;" parent="1" target="w35PViAqEVXVMyv1GmmO-23" edge="1">
+          <mxGeometry width="50" height="50" relative="1" as="geometry">
+            <mxPoint x="540" y="600" as="sourcePoint" />
+            <mxPoint x="340" y="640" as="targetPoint" />
+            <Array as="points">
+              <mxPoint x="540" y="720" />
+              <mxPoint x="100" y="720" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-31" value="Application" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="40" y="400" width="640" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="w35PViAqEVXVMyv1GmmO-32" value="UI/UX" style="rounded=0;whiteSpace=wrap;html=1;" parent="1" vertex="1">
+          <mxGeometry x="600" y="440" width="80" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="WXT3WjkLfi4mWMkm_OEx-11" value="QBP Library Dart" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="800" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="WXT3WjkLfi4mWMkm_OEx-12" value="QB Android Service" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="840" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="WXT3WjkLfi4mWMkm_OEx-13" value="Required Components" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="760" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="WXT3WjkLfi4mWMkm_OEx-14" value="Documents Interface" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="880" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="WXT3WjkLfi4mWMkm_OEx-15" value="UI/UX" style="rounded=0;whiteSpace=wrap;html=1;" vertex="1" parent="1">
+          <mxGeometry x="40" y="920" width="200" height="40" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
