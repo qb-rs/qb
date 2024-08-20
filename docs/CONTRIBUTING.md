@@ -1,4 +1,4 @@
-## How to contribute
+# How to contribute
 
 Welcome stranger, thanks for being here.
 
@@ -36,14 +36,14 @@ $ git commit -m "A brief summary of the commit
 
 6. [Create a pull request](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/proposing-changes-to-your-work-with-pull-requests/creating-a-pull-request) with a detailed description of what you did and why.
 
-### Note on Licensing
+## Note on Licensing
 
 By contributing to this repository you acknowledge that all contributed code must
 be compatible with our [LICENSE](../LICENSE). You acknowledge that you also must
 have the right to contribute the changes, while respecting copyright, local and global laws.
 
 
-### Naming conventions
+## Naming conventions
 
 - A package is a directory that contains stuff related to the QuixByte Application.
 This excludes documentation, website and CI related files.
