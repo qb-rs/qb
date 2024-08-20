@@ -18,5 +18,6 @@ jobs:
       RUSTGLAGS: '-D warnings'
     steps:
       - uses: actions/checkout@v4
-      - run: rustup update stable && rustup default stable
+      - run: rustup toolchain install stable --profile minimal
+      - uses: Swatinem/rust-cache@v2
       - run: cargo clippy --verbose
