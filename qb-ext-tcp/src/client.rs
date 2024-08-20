@@ -6,7 +6,10 @@ use std::sync::Arc;
 
 use bitcode::{Decode, Encode};
 use qb_core::device::QBDeviceId;
-use qb_ext::interface::{QBIChannel, QBIContext, QBISetup};
+use qb_ext::{
+    interface::{QBIChannel, QBIContext},
+    QBExtSetup,
+};
 use qb_proto::QBP;
 use rustls::{
     client::{danger::ServerCertVerifier, WebPkiServerVerifier},
@@ -68,8 +71,7 @@ impl QBIContext for QBITCPClient {
     }
 }
 
-// Somehow TLS does not work in this method. Find out why and fix it
-impl QBISetup<QBITCPClient> for QBITCPClient {
+impl QBExtSetup<QBITCPClient> for QBITCPClient {
     async fn setup(mut self) -> Self {
         debug!("initializing socket: {}", self.addr);
 

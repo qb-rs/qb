@@ -18,9 +18,9 @@ use tokio::{sync::mpsc, task::JoinSet};
 use bitcode::{Decode, Encode};
 use qb_ext::{
     control::{QBCId, QBCRequest, QBCResponse},
-    hook::{QBHContext, QBHSetup},
-    interface::{QBIContext, QBISetup},
-    QBExtId,
+    hook::QBHContext,
+    interface::QBIContext,
+    QBExtId, QBExtSetup,
 };
 use qb_proto::{QBPBlob, QBPDeserialize, QBP};
 use thiserror::Error;
@@ -290,7 +290,7 @@ impl QBDaemon {
     /// Register an interface kind.
     pub fn register_qbi<S, I>(&mut self, name: impl Into<String>)
     where
-        S: QBISetup<I> + QBPDeserialize,
+        S: QBExtSetup<I> + QBPDeserialize,
         I: QBIContext + Encode + for<'a> Decode<'a> + 'static,
     {
         let name = name.into();
@@ -324,7 +324,7 @@ impl QBDaemon {
     /// Register an interface kind.
     pub fn register_qbh<S, H, I>(&mut self, name: impl Into<String>)
     where
-        S: QBHSetup<H, I> + QBPDeserialize,
+        S: QBExtSetup<H> + QBPDeserialize,
         H: QBHContext<I> + Encode + for<'a> Decode<'a> + 'static,
         I: QBIContext + Any + Send,
     {

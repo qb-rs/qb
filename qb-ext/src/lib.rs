@@ -11,6 +11,7 @@ pub mod hook;
 pub mod interface;
 
 use core::fmt;
+use std::future::Future;
 
 use bitcode::{Decode, Encode};
 use hex::FromHexError;
@@ -51,6 +52,12 @@ impl QBExtId {
         hex::decode_to_slice(hex.as_ref(), &mut bytes)?;
         Ok(Self(u64::from_be_bytes(bytes)))
     }
+}
+
+/// TODO: doc
+pub trait QBExtSetup<T> {
+    /// Setup this extension.
+    fn setup(self) -> impl Future<Output = T> + Send + 'static;
 }
 
 /// A channel used for communication from a slave

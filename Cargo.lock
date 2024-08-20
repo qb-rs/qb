@@ -1016,9 +1016,9 @@ dependencies = [
  "interprocess",
  "qb-core",
  "qb-ext",
+ "qb-ext-local",
+ "qb-ext-tcp",
  "qb-proto",
- "qbi-local",
- "qbi-tcp",
  "thiserror",
  "tokio",
  "tracing",
@@ -1041,25 +1041,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "qb-proto"
-version = "0.1.0"
-dependencies = [
- "bitcode",
- "flate2",
- "itertools 0.13.0",
- "phf",
- "serde",
- "serde_bytes",
- "serde_json",
- "simdutf8",
- "thiserror",
- "tokio",
- "tracing",
- "url-search-params",
-]
-
-[[package]]
-name = "qbi-local"
+name = "qb-ext-local"
 version = "0.1.0"
 dependencies = [
  "bitcode",
@@ -1072,7 +1054,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "qbi-tcp"
+name = "qb-ext-tcp"
 version = "0.1.0"
 dependencies = [
  "bitcode",
@@ -1089,6 +1071,24 @@ dependencies = [
  "tokio-rustls",
  "tracing",
  "webpki-roots",
+]
+
+[[package]]
+name = "qb-proto"
+version = "0.1.0"
+dependencies = [
+ "bitcode",
+ "flate2",
+ "itertools 0.13.0",
+ "phf",
+ "serde",
+ "serde_bytes",
+ "serde_json",
+ "simdutf8",
+ "thiserror",
+ "tokio",
+ "tracing",
+ "url-search-params",
 ]
 
 [[package]]

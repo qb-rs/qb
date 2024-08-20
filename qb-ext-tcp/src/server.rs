@@ -7,8 +7,9 @@ use std::{net::IpAddr, str::FromStr, sync::Arc};
 use bitcode::{Decode, Encode};
 use qb_core::device::QBDeviceId;
 use qb_ext::{
-    hook::{QBHContext, QBHHostMessage, QBHInit, QBHSetup},
+    hook::{QBHContext, QBHHostMessage, QBHInit},
     interface::{QBIChannel, QBIContext},
+    QBExtSetup,
 };
 use qb_proto::QBP;
 use rcgen::SanType;
@@ -39,7 +40,7 @@ fn host_default() -> String {
     "0.0.0.0".to_string()
 }
 
-impl QBHSetup<QBHTCPServer, QBITCPServer> for QBHTCPServerSetup {
+impl QBExtSetup<QBHTCPServer> for QBHTCPServerSetup {
     async fn setup(self) -> QBHTCPServer {
         debug!("generating certificate...");
         let ca = CertificateBuilder::new()

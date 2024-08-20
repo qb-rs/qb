@@ -20,5 +20,5 @@ clap = { version = "4.5.9", features = ["derive"] }
 qb-core = { path = "../qb-core" }
 qb-proto = { path = "../qb-proto" }
 qb-ext = { path = "../qb-ext" }
-qbi-local = { path = "../qbi-local" }
-qbi-tcp = { path = "../qbi-tcp" }
+qb-ext-local = { path = "../qb-ext-local" }
+qb-ext-tcp = { path = "../qb-ext-tcp" }

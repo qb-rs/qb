@@ -13,7 +13,10 @@ use qb_core::{
     path::{qbpaths::INTERNAL, QBPath, QBResource},
     time::QBTimeStampRecorder,
 };
-use qb_ext::interface::{QBIChannel, QBIContext, QBIHostMessage, QBIMessage, QBISetup};
+use qb_ext::{
+    interface::{QBIChannel, QBIContext, QBIHostMessage, QBIMessage},
+    QBExtSetup,
+};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
@@ -28,7 +31,7 @@ impl QBIContext for QBILocal {
     }
 }
 
-impl QBISetup<QBILocal> for QBILocal {
+impl QBExtSetup<QBILocal> for QBILocal {
     async fn setup(self) -> Self {
         let mut fs = QBFS::init(self.path.clone()).await;
         fs.devices.host_id = QBDeviceId::generate();

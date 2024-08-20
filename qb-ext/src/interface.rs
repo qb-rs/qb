@@ -125,10 +125,3 @@ pub trait QBIContext: Send + Sync {
     fn run(self, host_id: QBDeviceId, com: QBIChannel)
         -> impl Future<Output = ()> + Send + 'static;
 }
-
-/// TODO: doc
-/// this has to be done in a task, otherwise it won't work
-pub trait QBISetup<T: QBIContext> {
-    /// Setup this kind of QBI.
-    fn setup(self) -> impl Future<Output = T> + Send + 'static;
-}

@@ -1,5 +1,5 @@
 [package]
-name = "qbi-local"
+name = "qb-ext-local"
 version.workspace = true
 edition.workspace = true
 

@@ -17,8 +17,8 @@ use interprocess::local_socket::{
 };
 use master::QBMaster;
 use qb_core::fs::wrapper::QBFSWrapper;
-use qbi_local::QBILocal;
-use qbi_tcp::{server::QBHTCPServerSetup, QBHTCPServer, QBITCPClient, QBITCPServer};
+use qb_ext_local::QBILocal;
+use qb_ext_tcp::{server::QBHTCPServerSetup, QBHTCPServer, QBITCPClient, QBITCPServer};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tracing::{info, level_filters::LevelFilter};
 use tracing_panic::panic_hook;
@@ -30,23 +30,24 @@ pub mod master;
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
-    /// Do not bind to a socket [default]
+    /// Bind to a socket for IPC [default]
     #[arg(long = "ípc")]
     _ipc_bind: bool,
 
-    /// Don't bind to a socket
+    /// Do not bind to a socket for IPC
     #[clap(long = "no-ipc", overrides_with = "_ipc_bind")]
     no_ipc_bind: bool,
 
-    /// Don't use STDIN/STDOUT for controlling [default]
-    #[clap(long = "no-stdio")]
-    _no_stdio_bind: bool,
-
-    /// Use STDIN/STDOUT for controlling
+    /// Use STDIN/STDOUT for controlling (disables std logging)
     #[clap(long = "stdio", overrides_with = "_no_stdio_bind")]
     stdio_bind: bool,
 
-    #[clap(long, short, default_value = "./")]
+    /// Do not use STDIN/STDOUT for controlling [default]
+    #[clap(long = "no-stdio")]
+    _no_stdio_bind: bool,
+
+    /// The path, where the daemon stores its files
+    #[clap(long, short, default_value = "./run/daemon1")]
     path: String,
 }
 

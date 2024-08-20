@@ -1,13 +1,17 @@
 [workspace]
 resolver = "2"
 members = [
+  # Libraries
   "qb-core",
   "qb-proto",
   "qb-ext",
+  # Extensions
+  "qb-ext-local",
+  "qb-ext-tcp",
+  # Binaries
   "qb-daemon",
+  # Application Clients
   "qb-cli",
-  "qbi-local",
-  "qbi-tcp",
 ]
 
 [workspace.package]

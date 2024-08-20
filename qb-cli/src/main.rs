@@ -23,32 +23,32 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// List the connected QBIs
+    /// List the connected extensions
     List,
-    /// Add an interface
+    /// Add an extension
     Add {
-        /// The name of the interface kind ("gdrive", "local", ...)
+        /// The name of the extension kind ("gdrive", "local", ...)
         name: String,
         #[arg(long = "type", default_value = "application/json")]
         content_type: String,
         content: Option<String>,
     },
     #[command(name = "rm")]
-    /// Remove an interface
+    /// Remove an extension
     Remove {
-        /// the id of the interface in hex format
+        /// the id of the extension in hex format
         #[arg(value_parser=parse_id)]
         id: QBExtId,
     },
-    /// Start an interface
+    /// Start an extension
     Start {
-        /// the id of the interface in hex format
+        /// the id of the extension in hex format
         #[arg(value_parser=parse_id)]
         id: QBExtId,
     },
-    /// Stop an interface
+    /// Stop an extension
     Stop {
-        /// the id of the interface in hex format
+        /// the id of the extension in hex format
         #[arg(value_parser=parse_id)]
         id: QBExtId,
     },

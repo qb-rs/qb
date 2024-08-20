@@ -1,5 +1,5 @@
 [package]
-name = "qbi-tcp"
+name = "qb-ext-tcp"
 version.workspace = true
 edition.workspace = true
 

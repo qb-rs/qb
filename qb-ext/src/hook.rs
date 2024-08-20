@@ -52,9 +52,3 @@ pub enum QBHSlaveMessage {
 pub trait QBHContext<I: QBIContext + Any + Send> {
     fn run(self, init: QBHInit<I>) -> impl Future<Output = ()> + Send + 'static;
 }
-
-/// TODO: doc
-pub trait QBHSetup<H: QBHContext<I>, I: QBIContext + Any + Send> {
-    /// Setup this kind of QBI.
-    fn setup(self) -> impl Future<Output = H> + Send + 'static;
-}
