@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - 'sites/quixbyte.org/**'
+      - 'sites/*/**'
 
 concurrency:
   group: "pages"
@@ -19,7 +19,7 @@ jobs:
       run:
         working-directory: sites/quixbyte.org
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: actions/setup-node@v3.4.1
         with:
           node-version: 16

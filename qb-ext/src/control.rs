@@ -56,6 +56,7 @@ impl QBCId {
 
 /// A request comming from a controlling task.
 #[derive(Encode, Decode, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum QBCRequest {
     /// Add a new interface or hook.
     Add {
@@ -113,6 +114,7 @@ impl fmt::Display for QBCRequest {
 
 /// A response comming from the daemon.
 #[derive(Encode, Decode, Serialize, Deserialize)]
+#[non_exhaustive]
 pub enum QBCResponse {
     /// An error has occured.
     Error {

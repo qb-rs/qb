@@ -173,6 +173,7 @@ impl QBMaster {
         // unwrap it
         let msg = match msg {
             QBISlaveMessage::Message(msg) => msg,
+            _ => unimplemented!(),
         };
 
         let span = info_span!("qbi-process", id = id.to_hex());
@@ -191,7 +192,7 @@ impl QBMaster {
                 match msg {
                     QBIMessage::Common { common } => {
                         // TODO: negotiate this instead
-                        self.devices.set_common(&device_id, common);
+                        self.devices.set_common(device_id, common);
                         handle.state = QBIState::Available {
                             device_id: device_id.clone(),
                             syncing: false,
@@ -220,7 +221,7 @@ impl QBMaster {
             }
         };
 
-        let handle_common = self.devices.get_common(&device_id);
+        let handle_common = self.devices.get_common(device_id);
 
         match msg {
             QBIMessage::Sync {
@@ -240,7 +241,7 @@ impl QBMaster {
                 // find the new common hash
                 let new_common = self.changemap.head().clone();
                 debug!("new common: {}", new_common);
-                self.devices.set_common(&device_id, new_common);
+                self.devices.set_common(device_id, new_common);
 
                 // Send sync to remote
                 if !*syncing {
@@ -258,7 +259,7 @@ impl QBMaster {
             }
             // TODO: negotiate this instead
             QBIMessage::Common { common } => {
-                self.devices.set_common(&device_id, common);
+                self.devices.set_common(device_id, common);
             }
             QBIMessage::Broadcast { msg } => broadcast.push(msg),
             QBIMessage::Device { .. } => {
@@ -300,6 +301,7 @@ impl QBMaster {
                             let context = *context.downcast::<T>().unwrap();
                             master.attach(QBExtId::generate(), context).await.unwrap();
                         }
+                        _ => unimplemented!(),
                     }
                 })
             })),
@@ -408,7 +410,7 @@ impl QBMaster {
                     continue;
                 }
 
-                let handle_common = self.devices.get_common(&device_id);
+                let handle_common = self.devices.get_common(device_id);
                 let changes = self.changemap.since_cloned(handle_common);
 
                 // skip if no changes to sync

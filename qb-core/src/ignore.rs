@@ -93,7 +93,7 @@ impl QBIgnoreMapBuilder {
             QBFSChangeKind::Delete => _ = self.ignores.remove(&path),
             QBFSChangeKind::Create => {}
             QBFSChangeKind::Rename { from } => {
-                let hash = self.ignores.remove(&from).unwrap();
+                let hash = self.ignores.remove(from).unwrap();
                 self.ignores.insert(path, hash);
             }
             QBFSChangeKind::Copy { from } => {
@@ -164,7 +164,7 @@ impl QBIgnoreMap {
             QBFSChangeKind::Delete => _ = self.ignores.remove(&path),
             QBFSChangeKind::Create => {}
             QBFSChangeKind::Rename { from } => {
-                let hash = self.ignores.remove(&from).unwrap();
+                let hash = self.ignores.remove(from).unwrap();
                 self.ignores.insert(path, hash);
             }
             QBFSChangeKind::Copy { from } => {

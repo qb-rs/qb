@@ -152,7 +152,7 @@ impl QBFS {
                 QBChangeKind::Create => Some(QBFSChangeKind::Create),
                 QBChangeKind::Delete => Some(QBFSChangeKind::Delete),
                 QBChangeKind::UpdateBinary(content) => {
-                    let hash = QBHash::compute(&content);
+                    let hash = QBHash::compute(content);
                     Some(QBFSChangeKind::Update {
                         content: content.clone(),
                         hash,

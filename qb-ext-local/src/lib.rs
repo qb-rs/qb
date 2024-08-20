@@ -246,6 +246,7 @@ impl Runner {
                             info!("stopping...");
                             break
                         }
+                        _ => unimplemented!(),
                     }
                 },
                 Some(Ok(event)) = watcher_rx.recv() => {

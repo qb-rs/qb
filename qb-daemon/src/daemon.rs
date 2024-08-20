@@ -83,10 +83,9 @@ pub struct QBCHandle {
 impl QBCHandle {
     /// Send a message to this handle
     pub async fn send(&self, msg: impl Into<QBCResponse>) {
-        match self.tx.send(msg.into()).await {
-            Err(err) => warn!("could not send message to handle: {0}", err),
-            Ok(_) => {}
-        };
+        if let Err(err) = self.tx.send(msg.into()).await {
+            warn!("could not send message to handle: {0}", err);
+        }
     }
 }
 
@@ -255,7 +254,7 @@ impl QBDaemon {
     }
 
     /// Remove an interface
-    pub async fn remove(&mut self, id: &QBExtId) -> Result<()> {
+    pub async fn remove(&mut self, id: QBExtId) -> Result<()> {
         self.config.ext_autostart.remove(&id);
         if self.master.is_attached(&id) {
             self.master.detach(&id).await?.await?
@@ -298,7 +297,7 @@ impl QBDaemon {
             name.clone(),
             Box::new(move |qb, id, data| {
                 Box::pin(async move {
-                    qb.attach(id, bitcode::decode::<I>(&data).unwrap()).await?;
+                    qb.attach(id, bitcode::decode::<I>(data).unwrap()).await?;
                     Ok(())
                 })
             }),
@@ -333,7 +332,7 @@ impl QBDaemon {
             name.clone(),
             Box::new(move |qb, id, data| {
                 Box::pin(async move {
-                    qb.hook(id, bitcode::decode::<H>(&data).unwrap()).await?;
+                    qb.hook(id, bitcode::decode::<H>(data).unwrap()).await?;
                     Ok(())
                 })
             }),
@@ -382,12 +381,13 @@ impl QBDaemon {
                 self.add(caller, name, blob)?;
                 return Ok(false);
             }
-            QBCRequest::Remove { id } => self.remove(&id).await?,
+            QBCRequest::Remove { id } => self.remove(id).await?,
             QBCRequest::List => {
                 let handle = self.handles.get(&caller).unwrap();
                 handle.send(QBCResponse::List { list: self.list() }).await;
                 return Ok(false);
             }
+            _ => unimplemented!(),
         };
 
         Ok(true)
@@ -419,9 +419,8 @@ where
 {
     let span = info_span!("handle", id = init.id.to_hex());
 
-    match _handle_run(&mut init).instrument(span.clone()).await {
-        Err(err) => span.in_scope(|| info!("handle finished with: {:?}", err)),
-        Ok(_) => {}
+    if let Err(err) = _handle_run(&mut init).instrument(span.clone()).await {
+        span.in_scope(|| info!("handle finished with: {:?}", err));
     }
 }
 

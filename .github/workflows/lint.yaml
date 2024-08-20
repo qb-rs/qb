@@ -1,0 +1,22 @@
+name: Lint code
+
+on: 
+  push:
+    branches:
+      - main
+  pull_request:
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  clippy:
+    name: Check for clippy warnings
+    runs-on: ubuntu-latest
+    env:
+      RUSTGLAGS: '-D warnings'
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup update stable && rustup default stable
+      - run: cargo clippy --verbose

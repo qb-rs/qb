@@ -57,6 +57,7 @@ impl Runner {
                             info!("stopping...");
                             break;
                         }
+                        _ => unimplemented!(),
                     }
                 }
             }

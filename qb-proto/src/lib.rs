@@ -132,7 +132,7 @@ pub const SUPPORTED_CONTENT_ENCODINGS: phf::OrderedMap<&'static str, QBPContentE
 
 impl QBPHeaderPacket {
     /// Convert from a standard QBPPacket.
-    pub fn deserialize<'a>(packet: &'a [u8]) -> Result<Self> {
+    pub fn deserialize(packet: &[u8]) -> Result<Self> {
         // check whether packet length is valid
         if packet.len() < 5 {
             return Err(Error::InvalidPacketSize(packet.len(), ">= 5".into()));
@@ -140,7 +140,7 @@ impl QBPHeaderPacket {
 
         // check whether magic bytes are valid
         let magic_bytes = &packet[0..3];
-        if magic_bytes != &MAGIC_BYTES {
+        if magic_bytes != MAGIC_BYTES {
             return Err(Error::InvalidMagicBytes(
                 magic_bytes.into(),
                 MAGIC_BYTES.into(),
@@ -175,7 +175,7 @@ impl QBPHeaderPacket {
         content.extend_from_slice(&MAGIC_BYTES);
         content.push(self.major_version);
         content.push(self.minor_version);
-        content.extend_from_slice(&head_bytes);
+        content.extend_from_slice(head_bytes);
 
         content
     }
@@ -291,7 +291,7 @@ mod encodeimpl {
         /// Encode data with this encoding.
         pub fn encode(&self, data: &[u8]) -> Vec<u8> {
             match self {
-                &QBPContentEncoding::Zlib => {
+                QBPContentEncoding::Zlib => {
                     trace!("encode: encoding data with zlib: {}", data.len());
 
                     let mut encoder = ZlibEncoder::new(Vec::new(), Compression::best());
@@ -302,7 +302,7 @@ mod encodeimpl {
 
                     res
                 }
-                &QBPContentEncoding::Gzip => {
+                QBPContentEncoding::Gzip => {
                     trace!("encode: encoding data with gzip: {}", data.len());
 
                     let mut encoder = GzEncoder::new(Vec::new(), Compression::best());
@@ -313,7 +313,7 @@ mod encodeimpl {
 
                     res
                 }
-                &QBPContentEncoding::Plain => {
+                QBPContentEncoding::Plain => {
                     trace!("encode: skip compression");
 
                     data.into()
@@ -324,17 +324,17 @@ mod encodeimpl {
         /// Decode encoded data.
         pub fn decode(&self, data: &[u8]) -> Vec<u8> {
             match self {
-                &QBPContentEncoding::Zlib => {
+                QBPContentEncoding::Zlib => {
                     let mut decoder = ZlibDecoder::new(Vec::new());
                     decoder.write_all(data).unwrap();
                     decoder.finish().unwrap()
                 }
-                &QBPContentEncoding::Gzip => {
+                QBPContentEncoding::Gzip => {
                     let mut decoder = GzDecoder::new(Vec::new());
                     decoder.write_all(data).unwrap();
                     decoder.finish().unwrap()
                 }
-                &QBPContentEncoding::Plain => {
+                QBPContentEncoding::Plain => {
                     trace!("encode: skip decompression");
 
                     data.into()
@@ -512,7 +512,7 @@ impl QBP {
     /// This method is cancelation safe.
     pub async fn send_payload(&mut self, write: &mut impl Write, payload: &[u8]) -> Result<()> {
         let (_, content_encoding) = self.get_content()?;
-        let packet = content_encoding.encode(&payload);
+        let packet = content_encoding.encode(payload);
         self.send_packet(write, &packet).await
     }
 
@@ -665,7 +665,7 @@ impl QBPWriter {
         let len_bytes = (packet.len() as u64).to_be_bytes();
         self.bytes.extend_from_slice(&len_bytes);
         trace!("write: data");
-        self.bytes.extend_from_slice(&packet);
+        self.bytes.extend_from_slice(packet);
         self.flush(write).await
     }
 

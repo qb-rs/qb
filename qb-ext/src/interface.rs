@@ -101,6 +101,7 @@ impl From<QBIMessage> for QBIHostMessage {
 
 /// a message coming from the interface
 #[derive(Encode, Decode, Serialize, Deserialize, Debug, Clone)]
+#[non_exhaustive]
 pub enum QBISlaveMessage {
     /// message
     Message(QBIMessage),
@@ -108,6 +109,7 @@ pub enum QBISlaveMessage {
 
 /// a message coming from the master
 #[derive(Encode, Decode, Serialize, Deserialize, Debug, Clone)]
+#[non_exhaustive]
 pub enum QBIHostMessage {
     /// message
     Message(QBIMessage),

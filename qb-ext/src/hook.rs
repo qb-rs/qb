@@ -35,15 +35,17 @@ impl<T: QBIContext + Any + Send> From<QBHChannel> for QBHInit<T> {
     fn from(value: QBHChannel) -> Self {
         Self {
             channel: value,
-            _t: PhantomData::default(),
+            _t: PhantomData,
         }
     }
 }
 
+#[non_exhaustive]
 pub enum QBHHostMessage {
     Stop,
 }
 
+#[non_exhaustive]
 pub enum QBHSlaveMessage {
     Attach { context: Box<dyn Any + Send> },
 }

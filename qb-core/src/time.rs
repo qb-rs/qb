@@ -27,14 +27,18 @@ impl fmt::Display for QBTimeStamp {
 }
 
 /// This struct represents a timestamp recorded on a specific device (no conflicts).
-#[derive(
-    Encode, Decode, Serialize, Deserialize, Clone, Default, Debug, Eq, PartialEq, PartialOrd,
-)]
+#[derive(Encode, Decode, Serialize, Deserialize, Clone, Default, Debug, Eq, PartialEq)]
 pub struct QBTimeStampUnique {
     /// The timestamp
     pub timestamp: QBTimeStamp,
     /// The device id
     pub device_id: QBDeviceId,
+}
+
+impl PartialOrd for QBTimeStampUnique {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
 }
 
 impl Ord for QBTimeStampUnique {

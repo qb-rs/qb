@@ -88,7 +88,7 @@ impl QBExtSetup<QBITCPClient> for QBITCPClient {
         let dnsname = ServerName::try_from("quixbyte.local").unwrap();
         debug!("do TLS handshake");
         let mut stream = connector.connect(dnsname, stream).await.unwrap();
-        self.cert = cert.lock().unwrap().as_ref().unwrap().clone();
+        self.cert.clone_from(cert.lock().unwrap().as_ref().unwrap());
         debug!("successfully extracted certificate");
 
         debug!("do quixbyte protocol handshake");
@@ -123,7 +123,7 @@ impl SetupVerifier {
     }
 }
 
-impl<'a> ServerCertVerifier for SetupVerifier {
+impl ServerCertVerifier for SetupVerifier {
     fn verify_server_cert(
         &self,
         end_entity: &CertificateDer<'_>,

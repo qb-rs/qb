@@ -67,19 +67,13 @@ impl QBChangeKind {
     /// Returns whether this change has external changes that rely on it.
     #[inline(always)]
     pub fn is_external(&self) -> bool {
-        match self {
-            QBChangeKind::CopyFrom | QBChangeKind::RenameFrom => true,
-            _ => false,
-        }
+        matches!(self, QBChangeKind::CopyFrom | QBChangeKind::RenameFrom)
     }
 
     /// Returns whether this change removes the resource.
     #[inline(always)]
     pub fn is_subtractive(&self) -> bool {
-        match self {
-            QBChangeKind::Delete | QBChangeKind::RenameFrom => true,
-            _ => false,
-        }
+        matches!(self, QBChangeKind::Delete | QBChangeKind::RenameFrom)
     }
 }
 
@@ -101,7 +95,7 @@ impl QBChangeMap {
                 (
                     resource.clone(),
                     entries
-                        .into_iter()
+                        .iter()
                         .filter(|e| &e.timestamp > since)
                         .cloned()
                         .collect::<Vec<_>>(),
@@ -144,9 +138,9 @@ impl QBChangeMap {
             self.head = other.head;
         }
         for (resource, mut other_entries) in other.changes.into_iter() {
-            let mut entries = self.entries(resource);
+            let entries = self.entries(resource);
             entries.append(&mut other_entries);
-            Self::_sort(&mut entries);
+            Self::_sort(entries);
         }
     }
 
@@ -160,8 +154,7 @@ impl QBChangeMap {
     pub fn iter(&self) -> impl Iterator<Item = (&QBResource, &QBChange)> {
         self.changes
             .iter()
-            .map(|(resource, entries)| entries.into_iter().map(move |change| (resource, change)))
-            .flatten()
+            .flat_map(|(resource, entries)| entries.iter().map(move |change| (resource, change)))
             .sorted_unstable_by(|a, b| Self::_sort_entry(a.1, b.1))
     }
 
@@ -211,7 +204,7 @@ impl QBChangeMap {
 
     #[inline(always)]
     fn _sort_borrowed(entries: &mut [&QBChange]) {
-        entries.sort_unstable_by(|a, b| Self::_sort_entry(*a, *b));
+        entries.sort_unstable_by(|a, b| Self::_sort_entry(a, b));
     }
 
     fn _sort_entry(a: &QBChange, b: &QBChange) -> std::cmp::Ordering {
@@ -282,7 +275,7 @@ impl QBChangeMap {
     pub fn get_rename_to(&self, timestamp: &QBTimeStampUnique) -> Option<(usize, &QBResource)> {
         self.changes.iter().find_map(|(resource, entries)| {
             entries
-                .into_iter()
+                .iter()
                 .position(|change| &change.timestamp == timestamp)
                 .map(|i| (i, resource))
         })
@@ -296,12 +289,12 @@ impl QBChangeMap {
     pub fn merge(&mut self, remote: Self) -> Result<Vec<(QBResource, QBChange)>, String> {
         let mut changes = Vec::new();
         for (resource, mut remote_entries) in remote.changes.into_iter() {
-            if let Some(mut entries) = self.changes.get_mut(&resource) {
+            if let Some(entries) = self.changes.get_mut(&resource) {
                 // TODO: do this properly
                 let rchanges = remote_entries.clone();
                 changes.extend(&mut rchanges.into_iter().map(|e| (resource.clone(), e)));
 
-                *entries = Self::_merge(remote_entries, &mut entries);
+                *entries = Self::_merge(remote_entries, entries);
                 // TODO: update head
             } else {
                 changes.extend(
