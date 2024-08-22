@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:ui';
 import 'dart:async';
 import 'package:path_provider/path_provider.dart';
@@ -6,6 +7,7 @@ import 'package:process/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:qb_mobile/src/rust/api/daemon.dart';
+import 'package:qb_mobile/src/rust/api/log.dart';
 import 'package:qb_mobile/src/rust/frb_generated.dart';
 
 const ProcessManager processManager = LocalProcessManager();
@@ -49,6 +51,8 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
   await RustLib.init();
+  initLog().listen((msg) => print(utf8.decode(msg)));
+
   final dir = await getApplicationDocumentsDirectory();
   final daemon = await DaemonWrapper.init(path: dir.path);
 
@@ -61,9 +65,9 @@ void onStart(ServiceInstance service) async {
     print("background service started!");
   });
 
-  Timer.periodic(const Duration(seconds: 1), (timer) {
-    print("service is successfully running ${DateTime.now().second}");
-  });
+  //Timer.periodic(const Duration(seconds: 1), (timer) {
+  //  print("service is successfully running ${DateTime.now().second}");
+  //});
 
   while(true) {
     await daemon.process();
