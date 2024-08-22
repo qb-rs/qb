@@ -11,6 +11,7 @@ use std::{
     collections::{HashMap, HashSet},
     future::Future,
     pin::Pin,
+    sync::Arc,
     time::Duration,
 };
 use tokio::{sync::mpsc, task::JoinSet};
@@ -19,7 +20,7 @@ use bitcode::{Decode, Encode};
 use qb_ext::{
     control::{QBCId, QBCRequest, QBCResponse},
     hook::QBHContext,
-    interface::QBIContextBoxed,
+    interface::QBIContext,
     QBExtId, QBExtSetup,
 };
 use qb_proto::{QBPBlob, QBPDeserialize, QBP};
@@ -59,13 +60,15 @@ pub type Result<T> = std::result::Result<T, Error>;
 /// Function pointer to a function which starts an interface.
 pub type QBExtStartFn = Box<
     dyn for<'a> Fn(
-        &'a mut QBMaster,
-        QBExtId,
-        &'a [u8],
-    ) -> Pin<Box<dyn Future<Output = Result<()>> + 'a>>,
+            &'a mut QBMaster,
+            QBExtId,
+            &'a [u8],
+        ) -> Pin<Box<dyn Future<Output = Result<()>> + Send + Sync + 'a>>
+        + Send
+        + Sync,
 >;
 /// Function pointer to a function which sets up an interface.
-pub type QBExtSetupFn = Box<dyn Fn(&mut SetupQueue, QBCId, String, QBPBlob)>;
+pub type QBExtSetupFn = Arc<dyn Fn(&mut SetupQueue, QBCId, String, QBPBlob) + Send + Sync>;
 
 /// A struct which can be stored persistently that describes how to
 /// start a specific extension using its kind's name and a data payload.
@@ -290,22 +293,21 @@ impl QBDaemon {
     pub fn register_qbi<S, I>(&mut self, name: impl Into<String>)
     where
         S: QBExtSetup<I> + QBPDeserialize,
-        I: QBIContextBoxed + Encode + for<'a> Decode<'a> + 'static,
+        I: QBIContext + Encode + for<'a> Decode<'a> + 'static,
     {
         let name = name.into();
         self.start_fns.insert(
             name.clone(),
             Box::new(move |qb, id, data| {
                 Box::pin(async move {
-                    qb.attach(id, Box::new(bitcode::decode::<I>(data).unwrap()))
-                        .await?;
+                    qb.attach(id, bitcode::decode::<I>(data).unwrap())?;
                     Ok(())
                 })
             }),
         );
         self.setup_fns.insert(
             name,
-            Box::new(move |setup, caller, name, blob| {
+            Arc::new(move |setup, caller, name, blob| {
                 setup.join_set.spawn(async move {
                     let maybe_setup: Result<QBExtDescriptor> = async move {
                         let span = info_span!("qbi-setup", name);
@@ -325,8 +327,8 @@ impl QBDaemon {
     pub fn register_qbh<S, H, I>(&mut self, name: impl Into<String>)
     where
         S: QBExtSetup<H> + QBPDeserialize,
-        H: QBHContext<I> + Encode + for<'a> Decode<'a> + 'static,
-        I: QBIContextBoxed + Any + Send,
+        H: QBHContext<I> + Encode + for<'a> Decode<'a> + Send + Sync + 'static,
+        I: QBIContext + Any + Send,
     {
         let name = name.into();
         self.start_fns.insert(
@@ -340,7 +342,7 @@ impl QBDaemon {
         );
         self.setup_fns.insert(
             name,
-            Box::new(move |setup, caller, name, blob| {
+            Arc::new(move |setup, caller, name, blob| {
                 setup.join_set.spawn(async move {
                     let maybe_setup: Result<QBExtDescriptor> = async move {
                         let span = info_span!("qbi-setup", name);

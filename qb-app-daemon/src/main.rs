@@ -113,7 +113,7 @@ async fn main() {
                 // process interfaces
                 Some(v) = daemon.master.qbi_rx.recv() => daemon.master.iprocess(v).await,
                 // process hooks
-                Some(v) = daemon.master.qbh_rx.recv() => daemon.master.hprocess(v).await,
+                Some(v) = daemon.master.qbh_rx.recv() => daemon.master.hprocess(v),
                 // process control messages
                 Some(v) = daemon.req_rx.recv() => daemon.process(v).await,
                 // process daemon socket
@@ -128,7 +128,7 @@ async fn main() {
             // process interfaces
             Some(v) = daemon.master.qbi_rx.recv() => daemon.master.iprocess(v).await,
             // process hooks
-            Some(v) = daemon.master.qbh_rx.recv() => daemon.master.hprocess(v).await,
+            Some(v) = daemon.master.qbh_rx.recv() => daemon.master.hprocess(v),
             // process control messages
             Some(v) = daemon.req_rx.recv() => daemon.process(v).await,
             // process daemon setup queue

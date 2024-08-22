@@ -36,7 +36,7 @@ pub struct QBITCPClient {
 }
 
 impl QBIContext for QBITCPClient {
-    async fn run(&mut self, host_id: QBDeviceId, com: QBIChannel) {
+    async fn run(self, host_id: QBDeviceId, com: QBIChannel) {
         debug!("initializing socket: {}", self.addr);
 
         let socket = TcpSocket::new_v4().unwrap();
