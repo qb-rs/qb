@@ -25,6 +25,7 @@ use tracing::{debug, info};
 
 use crate::Runner;
 
+pub type QBITCPClientSetup = QBITCPClient;
 #[derive(Encode, Decode, Serialize, Deserialize, Debug)]
 pub struct QBITCPClient {
     pub addr: String,
@@ -72,8 +73,8 @@ impl QBIContext for QBITCPClient {
     }
 }
 
-impl QBExtSetup<QBITCPClient> for QBITCPClient {
-    async fn setup(mut self) -> Self {
+impl QBExtSetup<QBITCPClient> for QBITCPClientSetup {
+    async fn setup(mut self) -> QBITCPClient {
         debug!("initializing socket: {}", self.addr);
 
         let socket = TcpSocket::new_v4().unwrap();

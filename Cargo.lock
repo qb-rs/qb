@@ -1517,10 +1517,18 @@ dependencies = [
 name = "rust_lib_qb_mobile"
 version = "0.1.0"
 dependencies = [
+ "bitcode",
  "flutter_rust_bridge",
  "lazy_static",
  "qb-core",
  "qb-daemon",
+ "qb-ext",
+ "qb-ext-tcp",
+ "serde",
+ "tokio",
+ "tracing",
+ "tracing-panic",
+ "tracing-subscriber",
 ]
 
 [[package]]

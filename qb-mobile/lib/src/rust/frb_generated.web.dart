@@ -31,6 +31,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
 
   @protected
   DaemonWrapper
+      dco_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDaemonWrapper(
+          dynamic raw);
+
+  @protected
+  DaemonWrapper
+      dco_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDaemonWrapper(
+          dynamic raw);
+
+  @protected
+  DaemonWrapper
       dco_decode_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDaemonWrapper(
           dynamic raw);
 
@@ -52,6 +62,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   DaemonWrapper
       sse_decode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDaemonWrapper(
+          SseDeserializer deserializer);
+
+  @protected
+  DaemonWrapper
+      sse_decode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDaemonWrapper(
+          SseDeserializer deserializer);
+
+  @protected
+  DaemonWrapper
+      sse_decode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDaemonWrapper(
           SseDeserializer deserializer);
 
   @protected
@@ -83,6 +103,16 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   @protected
   void
       sse_encode_Auto_Owned_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDaemonWrapper(
+          DaemonWrapper self, SseSerializer serializer);
+
+  @protected
+  void
+      sse_encode_Auto_RefMut_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDaemonWrapper(
+          DaemonWrapper self, SseSerializer serializer);
+
+  @protected
+  void
+      sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDaemonWrapper(
           DaemonWrapper self, SseSerializer serializer);
 
   @protected

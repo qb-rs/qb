@@ -64,6 +64,10 @@ void onStart(ServiceInstance service) async {
   Timer.periodic(const Duration(seconds: 1), (timer) {
     print("service is successfully running ${DateTime.now().second}");
   });
+
+  while(true) {
+    await daemon.process();
+  }
 }
 
 //Future<void> copyBinary(String srcBin, File dst) async {

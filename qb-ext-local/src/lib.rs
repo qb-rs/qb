@@ -20,6 +20,7 @@ use qb_ext::{
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
+pub type QBILocalSetup = QBILocal;
 #[derive(Encode, Decode, Serialize, Deserialize)]
 pub struct QBILocal {
     pub path: String,
@@ -31,8 +32,8 @@ impl QBIContext for QBILocal {
     }
 }
 
-impl QBExtSetup<QBILocal> for QBILocal {
-    async fn setup(self) -> Self {
+impl QBExtSetup<QBILocal> for QBILocalSetup {
+    async fn setup(self) -> QBILocal {
         let mut fs = QBFS::init(self.path.clone()).await;
         fs.devices.host_id = QBDeviceId::generate();
         fs.save().await.unwrap();

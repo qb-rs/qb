@@ -10,4 +10,12 @@ crate-type = ["cdylib", "staticlib"]
 flutter_rust_bridge = "=2.3.0"
 qb-daemon = { path = "../../qb-daemon" }
 qb-core = { path = "../../qb-core" }
+qb-ext = { path = "../../qb-ext" }
+qb-ext-tcp = { path = "../../qb-ext-tcp" }
 lazy_static = "1.5.0"
+bitcode = "0.6.3"
+serde = "1.0.208"
+tracing-subscriber = "0.3.18"
+tracing-panic = "0.1.2"
+tracing = "0.1.40"
+tokio = "1.39.3"

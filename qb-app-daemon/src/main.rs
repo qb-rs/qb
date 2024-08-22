@@ -4,8 +4,8 @@ use clap::Parser;
 use qb_core::fs::wrapper::QBFSWrapper;
 use qb_daemon::daemon::QBDaemon;
 use qb_daemon::master::QBMaster;
-use qb_ext_local::QBILocal;
-use qb_ext_tcp::{server::QBHTCPServerSetup, QBHTCPServer, QBITCPClient, QBITCPServer};
+use qb_ext_local::QBILocalSetup;
+use qb_ext_tcp::{client::QBITCPClientSetup, server::QBHTCPServerSetup};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tracing::{info, level_filters::LevelFilter};
 use tracing_panic::panic_hook;
@@ -96,9 +96,9 @@ async fn main() {
 
     // Initialize the daemon
     let mut daemon = QBDaemon::init(master, wrapper).await;
-    daemon.register_qbi::<QBILocal, QBILocal>("local");
-    daemon.register_qbi::<QBITCPClient, QBITCPClient>("tcp");
-    daemon.register_qbh::<QBHTCPServerSetup, QBHTCPServer, QBITCPServer>("tcp-server");
+    daemon.register_qbi::<QBILocalSetup, _>("local");
+    daemon.register_qbi::<QBITCPClientSetup, _>("tcp");
+    daemon.register_qbh::<QBHTCPServerSetup, _, _>("tcp-server");
     daemon.autostart().await;
 
     if stdio_bind {
