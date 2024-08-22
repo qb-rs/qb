@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:qb_mobile/service.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializeService();
+  
   runApp(const QuixByteApp());
 }
 

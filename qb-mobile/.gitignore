@@ -10,6 +10,9 @@
 .svn/
 migrate_working_dir/
 
+# These should be built and not stored in VCS
+assets/bin/
+
 # IntelliJ related
 *.iml
 *.ipr
