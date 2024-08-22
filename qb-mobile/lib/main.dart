@@ -3,6 +3,7 @@ import 'package:qb_mobile/service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  print("kekw");
   await initializeService();
   
   runApp(const QuixByteApp());

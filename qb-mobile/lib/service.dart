@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:ui';
 import 'dart:async';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:process/process.dart';
@@ -48,18 +49,33 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 }
 
 @pragma('vm:entry-point')
-
 void onStart(ServiceInstance service) async {
-  final cacheDir = await getApplicationCacheDirectory();
-  final file = File('${cacheDir.path}/bin/qb-daemon');
-  //if(!await file.exists()) {
-    await copyBinary(file);
-  //}
+  final dir = await getApplicationSupportDirectory();
+  final deviceInfo = DeviceInfoPlugin();
+  print("kekw");
+  if (Platform.isAndroid) {
+    final binaryAbis = ["arm64-v8a", "armeabi-v7a", "x86_64"];
+    final androidInfo = await deviceInfo.androidInfo;
+    final supportedAbis = androidInfo.supportedAbis;
+    final abi = binaryAbis.firstWhere((abi) => supportedAbis.contains(abi));
+    //final file = File('${dir.path}/bin/qb-daemon-$abi');
+    //if(!await file.exists()) {
+    //await copyBinary('qb-daemon-$abi', file);
+    //}
 
-  final process = await processManager.start([file.path, '--no-ipc --std']);
-  process.stdout.listen((data) {
-    print("recv: $data");
-  });
+    final fileProc = await processManager.run(['ls', '-la', '/data/app/com.example.qb_mobile.apk']);
+    print(fileProc.stdout);
+    print(fileProc.stderr);
+
+    final file = File('');
+    final process = await processManager.run([file.path, '--no-ipc --std'], runInShell: true);
+    print(process.stderr);
+    process.stdout.listen((data) {
+      print("recv: $data");
+    });
+  } else {
+    throw UnimplementedError("QuixByte does not support this device (yet)!");
+  }
 
   service.on("stop").listen((event) {
     service.stopSelf();
@@ -75,15 +91,16 @@ void onStart(ServiceInstance service) async {
   });
 }
 
-Future<void> copyBinary(File dst) async {
-  await dst.create(recursive: true);
-  final src = await rootBundle.load("assets/bin/qb-daemon");
-  await dst.writeAsBytes(src.buffer.asUint8List(src.offsetInBytes, src.lengthInBytes));
-  print(src.lengthInBytes);
-  
-  final chmodProc = await processManager.run(['chmod', '+x', dst.path], runInShell: true);
-  print(chmodProc.stdout);
-
-  final fileProc = await processManager.run(['file', dst.path]);
-  print(fileProc.stdout);
-}
+//Future<void> copyBinary(String srcBin, File dst) async {
+//  await dst.create(recursive: true);
+//  final src = await rootBundle.load("assets/bin/$srcBin");
+//  await dst.writeAsBytes(src.buffer.asUint8List(src.offsetInBytes, src.lengthInBytes));
+//  print(src.lengthInBytes);
+//  
+//  final chmodProc = await processManager.run(['chmod', '+x', dst.path], runInShell: true);
+//  print(chmodProc.stdout);
+//  print(chmodProc.stderr);
+//
+//  final fileProc = await processManager.run(['ls', '-la', dst.path]);
+//  print(fileProc.stdout);
+//}

@@ -9,6 +9,12 @@ android {
     namespace = "com.example.qb_mobile"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
+    
+    packagingOptions {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_1_8
@@ -35,6 +41,18 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.debug
+        }
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs += "native"
+        }
+        debug {
+            jniLibs.srcDirs += "native"
+        }
+        profile {
+            jniLibs.srcDirs += "native"
         }
     }
 }
