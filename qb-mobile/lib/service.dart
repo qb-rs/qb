@@ -9,7 +9,6 @@ import 'package:process/process.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 
-
 const ProcessManager processManager = LocalProcessManager();
 
 Future<void> initializeService() async {
@@ -63,12 +62,14 @@ void onStart(ServiceInstance service) async {
     //await copyBinary('qb-daemon-$abi', file);
     //}
 
-    final fileProc = await processManager.run(['ls', '-la', '/data/app/com.example.qb_mobile.apk']);
+    final fileProc = await processManager
+        .run(['ls', '-la', '/data/app/com.example.qb_mobile.apk']);
     print(fileProc.stdout);
     print(fileProc.stderr);
 
     final file = File('');
-    final process = await processManager.run([file.path, '--no-ipc --std'], runInShell: true);
+    final process = await processManager
+        .run([file.path, '--no-ipc --std'], runInShell: true);
     print(process.stderr);
     process.stdout.listen((data) {
       print("recv: $data");
@@ -96,7 +97,7 @@ void onStart(ServiceInstance service) async {
 //  final src = await rootBundle.load("assets/bin/$srcBin");
 //  await dst.writeAsBytes(src.buffer.asUint8List(src.offsetInBytes, src.lengthInBytes));
 //  print(src.lengthInBytes);
-//  
+//
 //  final chmodProc = await processManager.run(['chmod', '+x', dst.path], runInShell: true);
 //  print(chmodProc.stdout);
 //  print(chmodProc.stderr);

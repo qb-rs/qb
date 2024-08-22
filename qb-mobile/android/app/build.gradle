@@ -43,18 +43,6 @@ android {
             signingConfig = signingConfigs.debug
         }
     }
-
-    sourceSets {
-        main {
-            jniLibs.srcDirs += "native"
-        }
-        debug {
-            jniLibs.srcDirs += "native"
-        }
-        profile {
-            jniLibs.srcDirs += "native"
-        }
-    }
 }
 
 flutter {

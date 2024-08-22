@@ -12,6 +12,9 @@ members = [
   "qb-daemon",
   # Application Clients
   "qb-cli",
+
+  # Needed for FFI
+  "qb-mobile/rust",
 ]
 
 [workspace.package]
