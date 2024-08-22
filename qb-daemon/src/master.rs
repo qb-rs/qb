@@ -4,7 +4,7 @@
 //! which handles interfaces and their communication.
 //! It owns a device table and a changelog to allow syncing.
 
-use std::{collections::HashMap, future::Future, pin::Pin, rc::Rc};
+use std::collections::HashMap;
 
 use qb_core::{
     change::QBChangeMap,
@@ -14,7 +14,7 @@ use qb_core::{
 };
 use qb_ext::{
     hook::{QBHChannel, QBHContext, QBHHostMessage, QBHSlaveMessage},
-    interface::{QBIChannel, QBIContext, QBIHostMessage, QBIMessage, QBISlaveMessage},
+    interface::{QBIChannel, QBIContextBoxed, QBIHostMessage, QBIMessage, QBISlaveMessage},
     QBExtId,
 };
 use thiserror::Error;
@@ -69,18 +69,8 @@ pub struct QBIHandle {
 /// A handle to a hook.
 pub struct QBHHandle {
     join_handle: JoinHandle<()>,
-    handler_fn: QBHHandlerFn,
     tx: mpsc::Sender<QBHHostMessage>,
 }
-
-/// A hook handler function. This is needed, because the type of the
-/// interface context we send over the mpsc is Any and therefore the
-/// context must be downcast individually.
-pub type QBHHandlerFn = Rc<
-    Box<
-        dyn for<'a> Fn(&'a mut QBMaster, QBHSlaveMessage) -> Pin<Box<dyn Future<Output = ()> + 'a>>,
-    >,
->;
 
 /// The master, that is, the struct that houses connection
 /// to the individual interfaces and manages communication.
@@ -142,10 +132,13 @@ impl QBMaster {
     ///
     /// # Cancelation Safety
     /// This method is not cancelation safe.
-    pub async fn hprocess(&mut self, (id, msg): (QBExtId, QBHSlaveMessage)) {
-        let handle = self.qbh_handles.get(&id).unwrap();
-        let handler_fn = handle.handler_fn.clone();
-        handler_fn(self, msg).await;
+    pub async fn hprocess(&mut self, (_, msg): (QBExtId, QBHSlaveMessage)) {
+        match msg {
+            QBHSlaveMessage::Attach { context } => {
+                self.attach(QBExtId::generate(), context).await.unwrap()
+            }
+            _ => unimplemented!(),
+        }
     }
 
     /// Remove unused handles [from interfaces that have finished]
@@ -277,7 +270,7 @@ impl QBMaster {
     }
 
     /// Try to hook a hook to the master. Returns error if already hooked.
-    pub async fn hook<T: QBIContext + 'static>(
+    pub async fn hook<T: QBIContextBoxed + 'static>(
         &mut self,
         id: QBExtId,
         cx: impl QBHContext<T>,
@@ -293,18 +286,6 @@ impl QBMaster {
 
         // create the handle
         let handle = QBHHandle {
-            handler_fn: Rc::new(Box::new(move |master, msg| {
-                Box::pin(async move {
-                    match msg {
-                        QBHSlaveMessage::Attach { context } => {
-                            // downcast the context
-                            let context = *context.downcast::<T>().unwrap();
-                            master.attach(QBExtId::generate(), context).await.unwrap();
-                        }
-                        _ => unimplemented!(),
-                    }
-                })
-            })),
             join_handle: tokio::spawn(
                 cx.run(QBHChannel::new(id.clone(), self.qbh_tx.clone(), master_rx).into())
                     .instrument(span),
@@ -318,7 +299,7 @@ impl QBMaster {
     }
 
     /// Try to attach an interface to the master. Returns error if already attached.
-    pub async fn attach(&mut self, id: QBExtId, cx: impl QBIContext) -> Result<()> {
+    pub async fn attach(&mut self, id: QBExtId, cx: Box<dyn QBIContextBoxed>) -> Result<()> {
         let span = info_span!("qb-interface", id = id.to_hex());
 
         // make sure we do not attach an interface twice
@@ -331,7 +312,7 @@ impl QBMaster {
         // create the handle
         let handle = QBIHandle {
             join_handle: tokio::spawn(
-                cx.run(
+                cx.run_boxed(
                     self.devices.host_id.clone(),
                     QBIChannel::new(id.clone(), self.qbi_tx.clone(), master_rx),
                 )

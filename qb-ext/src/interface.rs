@@ -17,8 +17,8 @@
 
 use bitcode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use std::future::Future;
+use std::{fmt, pin::Pin};
 
 use crate::QBExtId;
 use qb_core::{change::QBChangeMap, device::QBDeviceId, time::QBTimeStampUnique};
@@ -126,4 +126,22 @@ pub trait QBIContext: Send + Sync {
     /// async task (might be a thread, depends on how tokio handles this).
     fn run(self, host_id: QBDeviceId, com: QBIChannel)
         -> impl Future<Output = ()> + Send + 'static;
+}
+
+pub trait QBIContextBoxed: Send + Sync {
+    fn run_boxed(
+        self,
+        host_id: QBDeviceId,
+        com: QBIChannel,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>>;
+}
+
+impl<T: QBIContext> QBIContextBoxed for T {
+    fn run_boxed(
+        self,
+        host_id: QBDeviceId,
+        com: QBIChannel,
+    ) -> Pin<Box<dyn Future<Output = ()> + Send + 'static>> {
+        Box::pin(self.run(host_id, com))
+    }
 }

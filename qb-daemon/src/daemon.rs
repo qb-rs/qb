@@ -19,7 +19,7 @@ use bitcode::{Decode, Encode};
 use qb_ext::{
     control::{QBCId, QBCRequest, QBCResponse},
     hook::QBHContext,
-    interface::QBIContext,
+    interface::QBIContextBoxed,
     QBExtId, QBExtSetup,
 };
 use qb_proto::{QBPBlob, QBPDeserialize, QBP};
@@ -290,14 +290,15 @@ impl QBDaemon {
     pub fn register_qbi<S, I>(&mut self, name: impl Into<String>)
     where
         S: QBExtSetup<I> + QBPDeserialize,
-        I: QBIContext + Encode + for<'a> Decode<'a> + 'static,
+        I: QBIContextBoxed + Encode + for<'a> Decode<'a> + 'static,
     {
         let name = name.into();
         self.start_fns.insert(
             name.clone(),
             Box::new(move |qb, id, data| {
                 Box::pin(async move {
-                    qb.attach(id, bitcode::decode::<I>(data).unwrap()).await?;
+                    qb.attach(id, Box::new(bitcode::decode::<I>(data).unwrap()))
+                        .await?;
                     Ok(())
                 })
             }),
@@ -325,7 +326,7 @@ impl QBDaemon {
     where
         S: QBExtSetup<H> + QBPDeserialize,
         H: QBHContext<I> + Encode + for<'a> Decode<'a> + 'static,
-        I: QBIContext + Any + Send,
+        I: QBIContextBoxed + Any + Send,
     {
         let name = name.into();
         self.start_fns.insert(
