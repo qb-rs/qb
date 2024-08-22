@@ -13,11 +13,11 @@ use qb_ext::{
 };
 use qb_proto::QBP;
 use rcgen::SanType;
-use rustls::ServerConfig;
 use rustls_cert_gen::CertificateBuilder;
 use rustls_pemfile::private_key;
 use serde::Deserialize;
 use tokio::net::{TcpListener, TcpStream};
+use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::{TlsAcceptor, TlsStream};
 use tracing::{debug, error, info};
 

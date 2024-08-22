@@ -52,9 +52,9 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 void onStart(ServiceInstance service) async {
   final cacheDir = await getApplicationCacheDirectory();
   final file = File('${cacheDir.path}/bin/qb-daemon');
-  if(!await file.exists()) {
+  //if(!await file.exists()) {
     await copyBinary(file);
-  }
+  //}
 
   final process = await processManager.start([file.path, '--no-ipc --std']);
   process.stdout.listen((data) {
@@ -75,9 +75,15 @@ void onStart(ServiceInstance service) async {
   });
 }
 
-Future<void> copyBinary(File dstFile) async {
-  await dstFile.create(recursive: true);
-  final dst = await dstFile.open(mode: FileMode.read);
+Future<void> copyBinary(File dst) async {
+  await dst.create(recursive: true);
   final src = await rootBundle.load("assets/bin/qb-daemon");
-  await dst.writeFrom(src.buffer.asUint8List(src.offsetInBytes, src.lengthInBytes));
+  await dst.writeAsBytes(src.buffer.asUint8List(src.offsetInBytes, src.lengthInBytes));
+  print(src.lengthInBytes);
+  
+  final chmodProc = await processManager.run(['chmod', '+x', dst.path], runInShell: true);
+  print(chmodProc.stdout);
+
+  final fileProc = await processManager.run(['file', dst.path]);
+  print(fileProc.stdout);
 }

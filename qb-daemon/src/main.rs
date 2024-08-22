@@ -12,9 +12,6 @@ use std::{pin::Pin, str::FromStr, sync::Arc};
 
 use clap::Parser;
 use daemon::QBDaemon;
-use interprocess::local_socket::{
-    traits::tokio::Listener, GenericNamespaced, ListenerNonblockingMode, ListenerOptions, ToNsName,
-};
 use master::QBMaster;
 use qb_core::fs::wrapper::QBFSWrapper;
 use qb_ext_local::QBILocal;
@@ -24,16 +21,23 @@ use tracing::{info, level_filters::LevelFilter};
 use tracing_panic::panic_hook;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
+#[cfg(feature = "ipc")]
+use interprocess::local_socket::{
+    traits::tokio::Listener, GenericNamespaced, ListenerNonblockingMode, ListenerOptions, ToNsName,
+};
+
 pub mod daemon;
 pub mod master;
 
 #[derive(Parser)]
 #[command(version, about)]
 struct Cli {
+    #[cfg(feature = "ipc")]
     /// Bind to a socket for IPC [default]
     #[arg(long = "ípc")]
     _ipc_bind: bool,
 
+    #[cfg(feature = "ipc")]
     /// Do not bind to a socket for IPC
     #[clap(long = "no-ipc", overrides_with = "_ipc_bind")]
     no_ipc_bind: bool,
@@ -54,7 +58,6 @@ struct Cli {
 #[tokio::main(flavor = "multi_thread", worker_threads = 10)]
 async fn main() {
     let args = Cli::parse();
-    let ipc_bind = !args.no_ipc_bind;
     let stdio_bind = args.stdio_bind;
 
     // Setup formatting
@@ -81,19 +84,23 @@ async fn main() {
         tracing_subscriber::registry().with(debug_log).init();
     }
 
-    let socket = if ipc_bind {
-        let name = "qb-daemon.sock";
-        info!("bind to socket {}", name);
-        let name = name.to_ns_name::<GenericNamespaced>().unwrap();
-        Some(
-            ListenerOptions::new()
-                .name(name)
-                .nonblocking(ListenerNonblockingMode::Both)
-                .create_tokio()
-                .unwrap(),
-        )
-    } else {
-        None
+    #[cfg(feature = "ipc")]
+    let socket = {
+        let ipc_bind = !args.no_ipc_bind;
+        if ipc_bind {
+            let name = "qb-daemon.sock";
+            info!("bind to socket {}", name);
+            let name = name.to_ns_name::<GenericNamespaced>().unwrap();
+            Some(
+                ListenerOptions::new()
+                    .name(name)
+                    .nonblocking(ListenerNonblockingMode::Both)
+                    .create_tokio()
+                    .unwrap(),
+            )
+        } else {
+            None
+        }
     };
 
     let wrapper = QBFSWrapper::new(args.path);
@@ -113,33 +120,32 @@ async fn main() {
 
     // Process
     loop {
-        match &socket {
-            Some(socket) => {
-                tokio::select! {
-                    // process interfaces
-                    Some(v) = daemon.master.qbi_rx.recv() => daemon.master.iprocess(v).await,
-                    // process hooks
-                    Some(v) = daemon.master.qbh_rx.recv() => daemon.master.hprocess(v).await,
-                    // process control messages
-                    Some(v) = daemon.req_rx.recv() => daemon.process(v).await,
-                    // process daemon socket
-                    Ok(conn) = socket.accept() => daemon.init_handle(conn).await,
-                    // process daemon setup queue
-                    v = daemon.setup.join() => daemon.process_setup(v).await,
-                }
+        #[cfg(feature = "ipc")]
+        if let Some(socket) = &socket {
+            tokio::select! {
+                // process interfaces
+                Some(v) = daemon.master.qbi_rx.recv() => daemon.master.iprocess(v).await,
+                // process hooks
+                Some(v) = daemon.master.qbh_rx.recv() => daemon.master.hprocess(v).await,
+                // process control messages
+                Some(v) = daemon.req_rx.recv() => daemon.process(v).await,
+                // process daemon socket
+                Ok(conn) = socket.accept() => daemon.init_handle(conn).await,
+                // process daemon setup queue
+                v = daemon.setup.join() => daemon.process_setup(v).await,
             }
-            None => {
-                tokio::select! {
-                    // process interfaces
-                    Some(v) = daemon.master.qbi_rx.recv() => daemon.master.iprocess(v).await,
-                    // process hooks
-                    Some(v) = daemon.master.qbh_rx.recv() => daemon.master.hprocess(v).await,
-                    // process control messages
-                    Some(v) = daemon.req_rx.recv() => daemon.process(v).await,
-                    // process daemon setup queue
-                    v = daemon.setup.join() => daemon.process_setup(v).await,
-                }
-            }
+            continue;
+        }
+
+        tokio::select! {
+            // process interfaces
+            Some(v) = daemon.master.qbi_rx.recv() => daemon.master.iprocess(v).await,
+            // process hooks
+            Some(v) = daemon.master.qbh_rx.recv() => daemon.master.hprocess(v).await,
+            // process control messages
+            Some(v) = daemon.req_rx.recv() => daemon.process(v).await,
+            // process daemon setup queue
+            v = daemon.setup.join() => daemon.process_setup(v).await,
         }
     }
 }

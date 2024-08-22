@@ -11,14 +11,15 @@ use qb_ext::{
     QBExtSetup,
 };
 use qb_proto::QBP;
-use rustls::{
+use serde::{Deserialize, Serialize};
+use tokio::net::TcpSocket;
+use tokio_rustls::rustls::{
+    self,
     client::{danger::ServerCertVerifier, WebPkiServerVerifier},
     lock::Mutex,
     pki_types::{CertificateDer, ServerName},
     RootCertStore,
 };
-use serde::{Deserialize, Serialize};
-use tokio::net::TcpSocket;
 use tokio_rustls::{TlsConnector, TlsStream};
 use tracing::{debug, info};
 
