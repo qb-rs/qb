@@ -6,7 +6,7 @@ use qb_daemon::{daemon::QBDaemon, master::QBMaster};
 
 #[frb(opaque)]
 pub struct DaemonWrapper {
-    daemon: QBDaemon,
+    _daemon: QBDaemon,
 }
 
 impl DaemonWrapper {
@@ -18,6 +18,6 @@ impl DaemonWrapper {
         let mut daemon = QBDaemon::init(master, wrapper).await;
         daemon.autostart().await;
 
-        Self { daemon }
+        Self { _daemon: daemon }
     }
 }
