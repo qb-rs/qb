@@ -1,13 +1,12 @@
-import 'dart:io';
 import 'dart:ui';
 import 'dart:async';
-import 'package:device_info_plus/device_info_plus.dart';
-import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:process/process.dart';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
+import 'package:qb_mobile/src/rust/api/daemon.dart';
+import 'package:qb_mobile/src/rust/frb_generated.dart';
 
 const ProcessManager processManager = LocalProcessManager();
 
@@ -49,34 +48,9 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
-  final dir = await getApplicationSupportDirectory();
-  final deviceInfo = DeviceInfoPlugin();
-  print("kekw");
-  if (Platform.isAndroid) {
-    final binaryAbis = ["arm64-v8a", "armeabi-v7a", "x86_64"];
-    final androidInfo = await deviceInfo.androidInfo;
-    final supportedAbis = androidInfo.supportedAbis;
-    final abi = binaryAbis.firstWhere((abi) => supportedAbis.contains(abi));
-    //final file = File('${dir.path}/bin/qb-daemon-$abi');
-    //if(!await file.exists()) {
-    //await copyBinary('qb-daemon-$abi', file);
-    //}
-
-    final fileProc = await processManager
-        .run(['ls', '-la', '/data/app/com.example.qb_mobile.apk']);
-    print(fileProc.stdout);
-    print(fileProc.stderr);
-
-    final file = File('');
-    final process = await processManager
-        .run([file.path, '--no-ipc --std'], runInShell: true);
-    print(process.stderr);
-    process.stdout.listen((data) {
-      print("recv: $data");
-    });
-  } else {
-    throw UnimplementedError("QuixByte does not support this device (yet)!");
-  }
+  await RustLib.init();
+  final dir = await getApplicationDocumentsDirectory();
+  final daemon = await DaemonWrapper.init(path: dir.path);
 
   service.on("stop").listen((event) {
     service.stopSelf();
