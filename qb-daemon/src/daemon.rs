@@ -11,7 +11,6 @@ use std::{
     collections::{HashMap, HashSet},
     future::Future,
     pin::Pin,
-    sync::Arc,
     time::Duration,
 };
 use tokio::{sync::mpsc, task::JoinSet};
@@ -68,7 +67,7 @@ pub type QBExtStartFn = Box<
         + Sync,
 >;
 /// Function pointer to a function which sets up an interface.
-pub type QBExtSetupFn = Arc<dyn Fn(&mut SetupQueue, QBCId, String, QBPBlob) + Send + Sync>;
+pub type QBExtSetupFn = Box<dyn Fn(&mut SetupQueue, QBCId, String, QBPBlob) + Send + Sync>;
 
 /// A struct which can be stored persistently that describes how to
 /// start a specific extension using its kind's name and a data payload.
@@ -307,7 +306,7 @@ impl QBDaemon {
         );
         self.setup_fns.insert(
             name,
-            Arc::new(move |setup, caller, name, blob| {
+            Box::new(move |setup, caller, name, blob| {
                 setup.join_set.spawn(async move {
                     let maybe_setup: Result<QBExtDescriptor> = async move {
                         let span = info_span!("qbi-setup", name);
@@ -342,7 +341,7 @@ impl QBDaemon {
         );
         self.setup_fns.insert(
             name,
-            Arc::new(move |setup, caller, name, blob| {
+            Box::new(move |setup, caller, name, blob| {
                 setup.join_set.spawn(async move {
                     let maybe_setup: Result<QBExtDescriptor> = async move {
                         let span = info_span!("qbi-setup", name);
