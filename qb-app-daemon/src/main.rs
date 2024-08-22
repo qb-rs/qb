@@ -1,19 +1,9 @@
-//! # qb-daemon
-//!
-//! This crate houses the daemon of the application,
-//! that is, the application that runs in the background,
-//! which handles interface tasks and their respective communication.
-//!
-//! We can communicate with the daemon using the [qb-control] messages.
-
-#![warn(missing_docs)]
-
 use std::{pin::Pin, str::FromStr, sync::Arc};
 
 use clap::Parser;
-use daemon::QBDaemon;
-use master::QBMaster;
 use qb_core::fs::wrapper::QBFSWrapper;
+use qb_daemon::daemon::QBDaemon;
+use qb_daemon::master::QBMaster;
 use qb_ext_local::QBILocal;
 use qb_ext_tcp::{server::QBHTCPServerSetup, QBHTCPServer, QBITCPClient, QBITCPServer};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -25,9 +15,6 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, Layer};
 use interprocess::local_socket::{
     traits::tokio::Listener, GenericNamespaced, ListenerNonblockingMode, ListenerOptions, ToNsName,
 };
-
-pub mod daemon;
-pub mod master;
 
 #[derive(Parser)]
 #[command(version, about)]

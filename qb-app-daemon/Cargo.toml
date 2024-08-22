@@ -1,0 +1,32 @@
+[package]
+name = "qb-app-daemon"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+tracing-subscriber = "0.3.18"
+tracing-panic = "0.1.2"
+tracing = "0.1.40"
+interprocess = { version = "2.2.0", features = ["tokio"], optional = true }
+tokio = { version = "1.37.0", features = [
+  "rt",
+  "rt-multi-thread",
+  "sync",
+  "macros",
+] }
+clap = { version = "4.5.9", features = ["derive"] }
+qb-core = { path = "../qb-core" }
+qb-daemon = { path = "../qb-daemon" }
+qb-ext-local = { path = "../qb-ext-local" }
+qb-ext-tcp = { path = "../qb-ext-tcp", default-features = false }
+
+[features]
+default = ["ipc", "aws_lc_rs"]
+ipc = ["dep:interprocess"]
+aws_lc_rs = ["qb-ext-tcp/aws_lc_rs"]
+aws-lc-rs = ["aws_lc_rs"]
+ring = ["qb-ext-tcp/ring"]
+
+[[bin]]
+name = "qb-daemon"
+path = "src/main.rs"

@@ -8,3 +8,6 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 flutter_rust_bridge = "=2.3.0"
+qb-daemon = { path = "../../qb-daemon" }
+qb-core = { path = "../../qb-core" }
+lazy_static = "1.5.0"

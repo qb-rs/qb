@@ -6,5 +6,8 @@
 import '../frb_generated.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-String greet({required String name}) =>
-    RustLib.instance.api.crateApiSimpleGreet(name: name);
+// Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<DaemonWrapper>>
+abstract class DaemonWrapper implements RustOpaqueInterface {
+  static Future<DaemonWrapper> init({required String path}) =>
+      RustLib.instance.api.crateApiDaemonDaemonWrapperInit(path: path);
+}

@@ -1272,7 +1272,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "qb-cli"
+name = "qb-app-cli"
 version = "0.1.0"
 dependencies = [
  "bitcode",
@@ -1281,6 +1281,22 @@ dependencies = [
  "qb-core",
  "qb-ext",
  "qb-proto",
+ "tokio",
+ "tracing",
+ "tracing-panic",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "qb-app-daemon"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "interprocess",
+ "qb-core",
+ "qb-daemon",
+ "qb-ext-local",
+ "qb-ext-tcp",
  "tokio",
  "tracing",
  "tracing-panic",
@@ -1314,18 +1330,12 @@ name = "qb-daemon"
 version = "0.1.0"
 dependencies = [
  "bitcode",
- "clap",
- "interprocess",
  "qb-core",
  "qb-ext",
- "qb-ext-local",
- "qb-ext-tcp",
  "qb-proto",
  "thiserror",
  "tokio",
  "tracing",
- "tracing-panic",
- "tracing-subscriber",
 ]
 
 [[package]]
@@ -1508,6 +1518,9 @@ name = "rust_lib_qb_mobile"
 version = "0.1.0"
 dependencies = [
  "flutter_rust_bridge",
+ "lazy_static",
+ "qb-core",
+ "qb-daemon",
 ]
 
 [[package]]

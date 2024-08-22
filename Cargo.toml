@@ -5,16 +5,15 @@ members = [
   "qb-core",
   "qb-proto",
   "qb-ext",
+  "qb-daemon",
   # Extensions
   "qb-ext-local",
   "qb-ext-tcp",
-  # Binaries
-  "qb-daemon",
-  # Application Clients
-  "qb-cli",
+  # Applications
+  "qb-app-cli",
 
   # Needed for FFI
-  "qb-mobile/rust",
+  "qb-mobile/rust", "qb-app-daemon",
 ]
 
 [workspace.package]

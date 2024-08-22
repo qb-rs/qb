@@ -95,11 +95,15 @@
 //
 
 import 'package:flutter/material.dart';
-import 'package:qb_mobile/src/rust/api/simple.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:qb_mobile/src/rust/api/daemon.dart';
 import 'package:qb_mobile/src/rust/frb_generated.dart';
 
 Future<void> main() async {
   await RustLib.init();
+  final dir = await getApplicationDocumentsDirectory();
+  final daemon = await DaemonWrapper.init(path: '$dir');
+  print(daemon);
   runApp(const MyApp());
 }
 
@@ -113,7 +117,7 @@ class MyApp extends StatelessWidget {
         appBar: AppBar(title: const Text('flutter_rust_bridge quickstart')),
         body: Center(
           child: Text(
-              'Action: Call Rust `greet("Tom")`\nResult: `${greet(name: "Tom")}`'),
+              'Action: Call Rust `greet("Tom")`\nResult:`'),
         ),
       ),
     );

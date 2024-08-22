@@ -1,5 +1,5 @@
 [package]
-name = "qb-cli"
+name = "qb-app-cli"
 version.workspace = true
 edition.workspace = true
 
@@ -14,3 +14,7 @@ tracing = "0.1.40"
 qb-core = { path = "../qb-core" }
 qb-proto = { path = "../qb-proto" }
 qb-ext = { path = "../qb-ext" }
+
+[[bin]]
+name = "qb-cli"
+path = "src/main.rs"
