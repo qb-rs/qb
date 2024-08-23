@@ -21,7 +21,7 @@ something meaningful once or twice and then get in touch.
 
 1. [Goals](#goals)
 2. [Platform Support](#platform-support)
-3. [QBI Support](#qbi-support)
+3. [Extension Support](#extension-support)
 4. [Quickstart](#quickstart)
 5. [Terminology](#terminology)
 
@@ -45,21 +45,22 @@ Linux|x86_64|full, tested|yes
 Linux|any|untested, should work|yes
 Windows|any|currently no support|yes
 Mac-OS|any|untested, should work|yes
-Android|any|unknown|yes
+Android|arm64-v8|partial, no UDS impl yet|yes
+Android|armeabi-v7|partial, no UDS impl yet|yes
+Android|x86_64|partial, no UDS impl yet|yes
 iOS|any|unknown|yes
 
-## QBI Support
+## Extension Support
 
 <!-- TODO: tidy this -->
 
 service|description|support|planned
 ---|---|---|---
-qbi-local|sync to local folder|yes|yes
-qbi-rtc|sync via WebRTC|unimplemented|yes
-qbi-server|start server|unimplemented|yes
-qbi-client|sync to server|unimplemented|yes
-qbi-gdrive|sync to Google Drive|unimplemented|yes
-qbi-dropbox|sync to Dropbox|unimplemented|yes
+qb-ext-local|sync to local folder|yes|yes
+qb-ext-tcp|sync via tcp (and TLS)|yes|yes
+qb-ext-rtc|sync via WebRTC|unimplemented|yes
+qb-ext-gdrive|sync to Google Drive|unimplemented|yes
+qb-ext-dropbox|sync to Dropbox|unimplemented|yes
 
 ## Quickstart
 
