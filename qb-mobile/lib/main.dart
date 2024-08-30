@@ -45,6 +45,10 @@ class QuixByteHomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    methodChannel.invokeMethod('getBatteryLevel').then((percentage) {
+      print("Battery percentage: $percentage");
+    });
+
     // This method is rerun every time setState is called, for instance as done
     // by the _incrementCounter method above.
     //
