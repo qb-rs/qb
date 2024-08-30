@@ -80,6 +80,7 @@ class QuixByteHomePage extends StatelessWidget {
           // wireframe for each widget.
           mainAxisAlignment: MainAxisAlignment.center,
           children: <Widget>[
+            FilledButton(onPressed: () {}, child: const Text("kekw")),
             FilledButton(onPressed: () {}, child: const Text("Settings")),
             FilledButton(onPressed: () {}, child: const Text("Manage")),
             FilledButton(onPressed: () {}, child: const Text("View Files")),
@@ -89,4 +90,3 @@ class QuixByteHomePage extends StatelessWidget {
     );
   }
 }
-

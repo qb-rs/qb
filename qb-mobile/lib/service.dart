@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:ui';
 import 'dart:async';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:process/process.dart';
 
@@ -11,6 +12,9 @@ import 'package:qb_mobile/src/rust/api/log.dart';
 import 'package:qb_mobile/src/rust/frb_generated.dart';
 
 const ProcessManager processManager = LocalProcessManager();
+
+const methodChannel =
+    MethodChannel('org.quixbyte.qb_mobile/android_documents_provider');
 
 Future<void> initializeService() async {
   final service = FlutterBackgroundService();
@@ -65,11 +69,14 @@ void onStart(ServiceInstance service) async {
     print("background service started!");
   });
 
+  final percentage = await methodChannel.invokeMethod('kekw');
+  print("Battery percentage: $percentage");
+
   //Timer.periodic(const Duration(seconds: 1), (timer) {
   //  print("service is successfully running ${DateTime.now().second}");
   //});
 
-  while(true) {
+  while (true) {
     await daemon.process();
   }
 }
