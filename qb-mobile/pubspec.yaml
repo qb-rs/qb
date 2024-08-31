@@ -56,8 +56,19 @@ dev_dependencies:
   integration_test:
     sdk: flutter
 
+  flutter_launcher_icons: "^0.13.1"
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "../brand/logo.png"
+  min_sdk_android: 22
+  remove_alpha_ios: true
+  adaptive_icon_foreground: "../brand/logo_android.svg"
+  adaptive_icon_background: "#ffffff"
 
 # The following section is specific to Flutter packages.
 flutter:

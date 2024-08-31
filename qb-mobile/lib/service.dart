@@ -59,6 +59,7 @@ void onStart(ServiceInstance service) async {
   initLog().listen((msg) => print(utf8.decode(msg)));
 
   final dir = await getApplicationDocumentsDirectory();
+  print("directory: $dir");
   final daemon = await DaemonWrapper.init(path: dir.path);
 
   service.on("stop").listen((event) {

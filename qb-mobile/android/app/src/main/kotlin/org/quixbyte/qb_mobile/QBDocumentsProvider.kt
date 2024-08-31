@@ -14,129 +14,190 @@ import androidx.annotation.UiThread
 import io.flutter.FlutterInjector
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.embedding.engine.FlutterEngineCache
-import io.flutter.embedding.engine.FlutterJNI
 import io.flutter.embedding.engine.dart.DartExecutor
 import io.flutter.plugin.common.JSONMethodCodec
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.util.PathUtils
+import java.io.File
+import java.util.concurrent.atomic.AtomicBoolean
 
 class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler {
+    private var isInit: AtomicBoolean = AtomicBoolean(false)
     private lateinit var channel: MethodChannel
-    private var TAG = "QBDocumentsProvider"
-    private var ENGINE_ID = "org.quixbyte.qb_mobile/documents_provider"
-    private var CHANNEL_ID = "org.quixbyte.qb_mobile/documents_provider"
+    private lateinit var filesDir: File
 
-    var DEFAULT_ROOT_PROJECTION =
-        arrayOf(
-            Root.COLUMN_ROOT_ID,
-            Root.COLUMN_MIME_TYPES,
-            Root.COLUMN_FLAGS,
-            Root.COLUMN_ICON,
-            Root.COLUMN_TITLE,
-            Root.COLUMN_SUMMARY,
-            Root.COLUMN_DOCUMENT_ID,
-            Root.COLUMN_AVAILABLE_BYTES,
-        )
-    var DEFAULT_DOCUMENT_PROJECTION =
-        arrayOf(
-            Document.COLUMN_DOCUMENT_ID,
-            Document.COLUMN_MIME_TYPE,
-            Document.COLUMN_DISPLAY_NAME,
-            Document.COLUMN_LAST_MODIFIED,
-            Document.COLUMN_FLAGS,
-            Document.COLUMN_SIZE,
-        )
+    // Constants
+    private val TAG = "QBDocumentsProvider"
+    private val ENGINE_ID = "org.quixbyte.qb_mobile/documents_provider"
+    private val CHANNEL_ID = "org.quixbyte.qb_mobile/documents_provider"
+    private val DOCUMENT_ID_PREFIX = "org.quixbyte.qb_mobile/"
+
+    var DEFAULT_ROOT_PROJECTION = arrayOf(
+        Root.COLUMN_ROOT_ID,
+        Root.COLUMN_DOCUMENT_ID,
+        Root.COLUMN_TITLE,
+        Root.COLUMN_SUMMARY,
+        Root.COLUMN_FLAGS,
+        Root.COLUMN_ICON,
+    )
+    var DEFAULT_DOCUMENT_PROJECTION = arrayOf(
+        Document.COLUMN_DOCUMENT_ID,
+        Document.COLUMN_DISPLAY_NAME,
+        Document.COLUMN_MIME_TYPE,
+        Document.COLUMN_FLAGS,
+        Document.COLUMN_SIZE,
+        Document.COLUMN_LAST_MODIFIED,
+    )
+
+    fun idToFile(id: String): File {
+        return filesDir.resolve(id.substring(DOCUMENT_ID_PREFIX.length))
+    }
 
     override fun queryRoots(projection: Array<out String?>?): Cursor? {
-        onCreate()
+        Log.i(TAG, "querying roots")
 
-        var result = MatrixCursor(DEFAULT_ROOT_PROJECTION)
+        var projection = projection ?: DEFAULT_ROOT_PROJECTION
+        var cursor = MatrixCursor(projection)
 
-        // It's possible to have multiple roots (e.g. for multiple accounts in the
-        // same app) -- just add multiple cursor rows.
-        var row = result.newRow()
-        row.add(Root.COLUMN_ROOT_ID, "qb_mobile")
+        cursor.newRow().apply {
+            add(Root.COLUMN_DOCUMENT_ID, "$DOCUMENT_ID_PREFIX.")
+            add(Root.COLUMN_TITLE, "QuixByte")
+            add(Root.COLUMN_SUMMARY, "your files")
+            add(
+                Root.COLUMN_FLAGS,
+                Root.FLAG_SUPPORTS_CREATE or Root.FLAG_SUPPORTS_RECENTS or Root.FLAG_SUPPORTS_SEARCH
+            )
+            add(Root.COLUMN_ICON, R.drawable.ic_launcher_round)
+        }
 
-        // You can provide an optional summary, which helps distinguish roots
-        // with the same title. You can also use this field for displaying an
-        // user account name.
-        row.add(Root.COLUMN_SUMMARY, "local files")
-
-        // FLAG_SUPPORTS_CREATE means at least one directory under the root supports
-        // creating documents. FLAG_SUPPORTS_RECENTS means your application's most
-        // recently used documents will show up in the "Recents" category.
-        // FLAG_SUPPORTS_SEARCH allows users to search all documents the application
-        // shares.
-        row.add(
-            Root.COLUMN_FLAGS,
-            Root.FLAG_SUPPORTS_CREATE or Root.FLAG_SUPPORTS_RECENTS or Root.FLAG_SUPPORTS_SEARCH
-        )
-
-        // COLUMN_TITLE is the root title (e.g. Gallery, Drive).
-        row.add(Root.COLUMN_TITLE, "QuixByte")
-
-        // This document id cannot change after it's shared.
-        row.add(Root.COLUMN_DOCUMENT_ID, 0)
-
-        // The child MIME types are used to filter the roots and only present to the
-        // user those roots that contain the desired type somewhere in their file hierarchy.
-        row.add(Root.COLUMN_MIME_TYPES, "")
-        row.add(Root.COLUMN_AVAILABLE_BYTES, 100000)
-        row.add(Root.COLUMN_ICON, "")
-
-        return result
+        return cursor;
     }
 
     override fun queryDocument(documentId: String?, projection: Array<out String?>?): Cursor? {
-        startDart("onCreate");
-        return null;
-        //TODO("Not yet implemented")
+        Log.i(TAG, "querying document '$documentId'")
+
+        if (documentId == null) {
+            TODO("unimplemented")
+        }
+
+        var projection = projection ?: DEFAULT_DOCUMENT_PROJECTION
+        var cursor = MatrixCursor(projection)
+
+        var file = idToFile(documentId)
+
+        cursor.newRow().apply {
+            add(Document.COLUMN_DOCUMENT_ID, documentId)
+            add(Document.COLUMN_DISPLAY_NAME, file.name)
+            var flag = Document.FLAG_DIR_SUPPORTS_CREATE
+            flag = flag or Document.FLAG_SUPPORTS_WRITE;
+            flag = flag or Document.FLAG_SUPPORTS_DELETE;
+            flag = flag or Document.FLAG_SUPPORTS_RENAME;
+            add(
+                Document.COLUMN_FLAGS, flag
+            )
+            add(
+                Document.COLUMN_MIME_TYPE, getMimeType(file)
+            )
+            add(
+                Document.COLUMN_SIZE, getSize(file)
+            )
+            add(
+                Document.COLUMN_LAST_MODIFIED, file.lastModified()
+            )
+        }
+
+        return cursor
+    }
+
+    fun getMimeType(file: File): String {
+        if (file.isDirectory) {
+            return Document.MIME_TYPE_DIR
+        }
+
+        return "text/plain"
+    }
+
+    fun getSize(file: File): Long {
+        return if (file.isDirectory) 0 else file.length()
     }
 
     override fun queryChildDocuments(
-        parentDocumentId: String?,
-        projection: Array<out String?>?,
-        sortOrder: String?
+        parentDocumentId: String?, projection: Array<out String?>?, sortOrder: String?
     ): Cursor? {
-        TODO("Not yet implemented")
+        Log.i(TAG, "querying documents from parent '$parentDocumentId'")
+
+        if (parentDocumentId == null) {
+            TODO("unimplemented")
+        }
+
+        var projection = projection ?: DEFAULT_DOCUMENT_PROJECTION
+        var cursor = MatrixCursor(projection)
+
+        var file = idToFile(parentDocumentId)
+        for (it in file.listFiles()!!) {
+            cursor.newRow().apply {
+                var id = parentDocumentId + "/" + it.name
+                add(Document.COLUMN_DOCUMENT_ID, id)
+                add(Document.COLUMN_DISPLAY_NAME, it.name)
+                var flag = Document.FLAG_DIR_SUPPORTS_CREATE
+                flag = flag or Document.FLAG_SUPPORTS_WRITE;
+                flag = flag or Document.FLAG_SUPPORTS_DELETE;
+                flag = flag or Document.FLAG_SUPPORTS_RENAME;
+                add(
+                    Document.COLUMN_FLAGS, flag
+                )
+                add(
+                    Document.COLUMN_MIME_TYPE, getMimeType(it)
+                )
+                add(
+                    Document.COLUMN_SIZE, getSize(it)
+                )
+                add(
+                    Document.COLUMN_LAST_MODIFIED, it.lastModified()
+                )
+            }
+        }
+
+        return cursor
     }
 
     override fun openDocument(
-        documentId: String?,
-        mode: String?,
-        signal: CancellationSignal?
+        documentId: String?, mode: String?, signal: CancellationSignal?
     ): ParcelFileDescriptor? {
         TODO("Not yet implemented")
     }
 
+    /**
+     * onCreate is called to initialize this documents provider
+     */
     override fun onCreate(): Boolean {
-        startDart("onCreate");
+        Log.i(TAG, "initializing")
 
-        return true;
-    }
+        var context = getContext()
+        if (context == null) {
+            TODO("Context is null, this should not happen")
+        }
 
-    /**
-     * Start a task to run a dart entrypoint. It is not guaranteed that the dart
-     * entrypoint will be started instantly.
-     */
-    fun startDart(entrypoint: String) {
-        startDart(entrypoint, null)
-    }
+        // get the files directory path
+        filesDir = File(PathUtils.getDataDirectory(context)).resolve("files");
 
-    /**
-     * Start a task to run a dart entrypoint. It is not guaranteed that the dart
-     * entrypoint will be started instantly.
-     */
-    fun startDart(entrypoint: String, dartEntrypointArgs: List<String>?) {
+        Log.i(TAG, "using files directory at ${filesDir.path}")
+
+        // This looks hacky, but works
         Handler(Looper.getMainLooper()).post {
-            Log.w(TAG, "starting dart entrypoint $entrypoint...")
+            Log.w(TAG, "starting dart handler...")
 
             try {
-                runDart(entrypoint, dartEntrypointArgs)
+                runDart("init")
             } catch (e: Error) {
-                Log.e(TAG, "Error while starting dart entrypoint $entrypoint: $e")
+                Log.e(TAG, "error while starting dart handler: $e")
             }
+
+            isInit.set(true)
         }
+
+        return true;
     }
 
     /**
@@ -162,12 +223,11 @@ class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler
         var engine = getEngine()
 
         var flutterLoader = FlutterInjector.instance().flutterLoader()
-        var dartEntrypoint =
-            DartExecutor.DartEntrypoint(
-                flutterLoader.findAppBundlePath(),
-                "package:qb_mobile/documents_provider.dart",
-                entrypoint
-            )
+        var dartEntrypoint = DartExecutor.DartEntrypoint(
+            flutterLoader.findAppBundlePath(),
+            "package:qb_mobile/documents_provider.dart",
+            entrypoint
+        )
 
         engine.dartExecutor.executeDartEntrypoint(dartEntrypoint, dartEntrypointArgs)
     }
@@ -202,13 +262,10 @@ class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler
         var engine = FlutterEngine(context)
         var executor = engine.dartExecutor
 
-        var methodChannel =
-            MethodChannel(
-                executor.getBinaryMessenger(),
-                CHANNEL_ID,
-                JSONMethodCodec.INSTANCE
-            )
-        methodChannel.setMethodCallHandler(this)
+        channel = MethodChannel(
+            executor.getBinaryMessenger(), CHANNEL_ID, JSONMethodCodec.INSTANCE
+        )
+        channel.setMethodCallHandler(this)
 
         return engine
     }
