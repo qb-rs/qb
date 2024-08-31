@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:qb_mobile/service.dart';
+export './documents_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -45,10 +46,6 @@ class QuixByteHomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    methodChannel.invokeMethod('getBatteryLevel').then((percentage) {
-      print("Battery percentage: $percentage");
-    });
-
     // This method is rerun every time setState is called, for instance as done
     // by the _incrementCounter method above.
     //

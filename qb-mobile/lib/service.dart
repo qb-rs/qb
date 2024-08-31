@@ -13,8 +13,7 @@ import 'package:qb_mobile/src/rust/frb_generated.dart';
 
 const ProcessManager processManager = LocalProcessManager();
 
-const methodChannel =
-    MethodChannel('org.quixbyte.qb_mobile/android_documents_provider');
+const methodChannel = MethodChannel('kekw');
 
 Future<void> initializeService() async {
   final service = FlutterBackgroundService();
@@ -54,6 +53,8 @@ Future<bool> onIosBackground(ServiceInstance service) async {
 
 @pragma('vm:entry-point')
 void onStart(ServiceInstance service) async {
+  WidgetsFlutterBinding.ensureInitialized();
+
   await RustLib.init();
   initLog().listen((msg) => print(utf8.decode(msg)));
 
@@ -69,8 +70,11 @@ void onStart(ServiceInstance service) async {
     print("background service started!");
   });
 
-  final percentage = await methodChannel.invokeMethod('kekw');
-  print("Battery percentage: $percentage");
+  service.on("kekw").listen((event) {
+    print("What da sygma?");
+  });
+
+  print("Kekw");
 
   //Timer.periodic(const Duration(seconds: 1), (timer) {
   //  print("service is successfully running ${DateTime.now().second}");
