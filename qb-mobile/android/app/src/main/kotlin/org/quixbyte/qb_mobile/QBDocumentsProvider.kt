@@ -1,11 +1,15 @@
 package org.quixbyte.qb_mobile
 
+import android.annotation.TargetApi
+import android.content.Context
 import android.database.Cursor
 import android.database.MatrixCursor
+import android.os.Build
 import android.os.CancellationSignal
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelFileDescriptor
+import android.os.storage.StorageManager
 import android.provider.DocumentsContract.Document
 import android.provider.DocumentsContract.Root
 import android.provider.DocumentsProvider
@@ -26,6 +30,8 @@ class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler
     private var isInit: AtomicBoolean = AtomicBoolean(false)
     private lateinit var channel: MethodChannel
     private lateinit var filesDir: File
+    private lateinit var storageManager: StorageManager
+    private lateinit var taskManager: QBTaskManager
 
     // Constants
     private val TAG = "QBDocumentsProvider"
@@ -165,7 +171,57 @@ class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler
     override fun openDocument(
         documentId: String?, mode: String?, signal: CancellationSignal?
     ): ParcelFileDescriptor? {
-        TODO("Not yet implemented")
+        Log.i(TAG, "opening document '$documentId'")
+
+        if (documentId == null || mode == null) {
+            TODO("unimplemented")
+        }
+
+        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            return openDocumentProxy(documentId, mode)
+        } else {
+            return openDocumentProxyPreO(documentId, mode)
+        }
+    }
+
+    @TargetApi(Build.VERSION_CODES.O)
+    private fun openDocumentProxy(documentId: String, mode: String): ParcelFileDescriptor {
+        return storageManager.openProxyFileDescriptor(
+            ParcelFileDescriptor.parseMode(mode),
+            QBFileCallback(idToFile(documentId), mode),
+            Handler(Looper.getMainLooper())
+        )
+    }
+
+    private fun openDocumentProxyPreO(documentId: String, mode: String): ParcelFileDescriptor {
+        // Doesn't support complex mode on pre-O devices.
+        if ("r" != mode && "w" != mode) {
+            throw UnsupportedOperationException("Mode $mode is not supported")
+        }
+
+        var file = idToFile(documentId)
+        var pipe = ParcelFileDescriptor.createReliablePipe()
+        when (mode) {
+            "r" -> {
+                taskManager.runTask {
+                    var stream = ParcelFileDescriptor.AutoCloseOutputStream(pipe[1])
+                    stream.write(file.readBytes())
+                    Log.i(TAG, "read finished")
+                }
+                return pipe[0];
+            }
+            "w" -> {
+                taskManager.runTask {
+                    var stream = ParcelFileDescriptor.AutoCloseInputStream(pipe[0])
+                    file.writeBytes(stream.readBytes())
+                    Log.i(TAG, "write finished")
+
+                    TODO("notify dart")
+                }
+                return pipe[1];
+            }
+            else -> TODO("unimplemented")
+        }
     }
 
     /**
@@ -180,7 +236,10 @@ class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler
         }
 
         // get the files directory path
-        filesDir = File(PathUtils.getDataDirectory(context)).resolve("files");
+        filesDir = File(PathUtils.getDataDirectory(context)).resolve("files")
+
+        storageManager = context.getSystemService(Context.STORAGE_SERVICE) as StorageManager
+        taskManager = QBTaskManager()
 
         Log.i(TAG, "using files directory at ${filesDir.path}")
 

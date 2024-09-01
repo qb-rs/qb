@@ -97,7 +97,7 @@ async fn main() {
     // Initialize the daemon
     let mut daemon = QBDaemon::init(master, wrapper).await;
     daemon.register_qbi::<QBILocalSetup, _>("local");
-    daemon.register_qbi::<QBITCPClientSetup, _>("tcp");
+    daemon.register_qbi::<QBITCPClientSetup, _>("tcp-client");
     daemon.register_qbh::<QBHTCPServerSetup, _, _>("tcp-server");
     daemon.autostart().await;
 
