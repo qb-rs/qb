@@ -1524,6 +1524,7 @@ dependencies = [
  "qb-daemon",
  "qb-ext",
  "qb-ext-tcp",
+ "qb-proto",
  "serde",
  "tokio",
  "tracing",

@@ -197,10 +197,21 @@ impl QBDaemon {
             Ok(val) => {
                 // success: add the descriptor to this daemon
                 self.add_already_setup(val).await.unwrap();
+
+                if id.is_root() {
+                    return;
+                }
+
                 let handle = self.handles.get(&id).unwrap();
                 handle.send(QBCResponse::Success).await;
             }
             Err(err) => {
+                warn!("error while setting up extension: {err}");
+
+                if id.is_root() {
+                    return;
+                }
+
                 // error: forward error to the QBCHandle which issued setup
                 let handle = self.handles.get(&id).unwrap();
                 handle

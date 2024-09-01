@@ -40,6 +40,10 @@ impl QBCId {
         Self(rng.gen::<u64>())
     }
 
+    pub fn root() -> Self {
+        Self(0)
+    }
+
     /// Get the string representation of this id in hex format
     pub fn to_hex(&self) -> String {
         let id_bytes = self.0.to_be_bytes();
@@ -51,6 +55,10 @@ impl QBCId {
         let mut id_bytes: [u8; 8] = [0; 8];
         hex::decode_to_slice(hex.as_ref(), &mut id_bytes)?;
         Ok(Self(u64::from_be_bytes(id_bytes)))
+    }
+
+    pub fn is_root(&self) -> bool {
+        self.0 == 0
     }
 }
 

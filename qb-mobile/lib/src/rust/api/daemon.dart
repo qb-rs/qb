@@ -10,14 +10,45 @@ import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
 // Rust type: RustOpaqueMoi<flutter_rust_bridge::for_generated::RustAutoOpaqueInner<DaemonWrapper>>
 abstract class DaemonWrapper implements RustOpaqueInterface {
-  /// Cancel processing the daemon.
+  /// Add an extension to this daemon
+  ///
+  /// This will cancel cancelable tasks, which block execution,
+  /// as they require mutable access to the daemon.
+  Future<void> add(
+      {required String name,
+      required String contentType,
+      required List<int> content});
+
+  /// Cancel cancelable tasks.
   Future<void> cancel();
 
   /// Initialize a new daemon process.
   static Future<DaemonWrapper> init({required String path}) =>
       RustLib.instance.api.crateApiDaemonDaemonWrapperInit(path: path);
 
-  /// Process the daemon. This can be canceled using the cancel method.
-  /// If called twice, this will cancel the previous execution.
+  /// Process the daemon.
+  ///
+  /// This will cancel cancelable tasks, which block execution,
+  /// as they require mutable access to the daemon.
+  ///
+  /// This task is cancelable using the cancel method.
   Future<void> process();
+
+  /// Remove an extension to this daemon.
+  ///
+  /// This will cancel cancelable tasks, which block execution,
+  /// as they require mutable access to the daemon.
+  Future<void> remove({required BigInt id});
+
+  /// Start an extension for this daemon.
+  ///
+  /// This will cancel cancelable tasks, which block execution,
+  /// as they require mutable access to the daemon.
+  Future<void> start({required BigInt id});
+
+  /// Stop an extension for this daemon.
+  ///
+  /// This will cancel cancelable tasks, which block execution,
+  /// as they require mutable access to the daemon.
+  Future<void> stop({required BigInt id});
 }

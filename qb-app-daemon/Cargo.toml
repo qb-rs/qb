@@ -21,7 +21,7 @@ qb-ext-local = { path = "../qb-ext-local" }
 qb-ext-tcp = { path = "../qb-ext-tcp", default-features = false }
 
 [features]
-default = ["ipc", "aws_lc_rs"]
+default = ["ipc", "ring"]
 ipc = ["dep:interprocess"]
 aws_lc_rs = ["qb-ext-tcp/aws_lc_rs"]
 aws-lc-rs = ["aws_lc_rs"]

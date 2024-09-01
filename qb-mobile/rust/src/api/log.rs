@@ -41,7 +41,7 @@ pub fn init_log(log_sink: StreamSink<Vec<u8>>) {
         .pretty()
         .with_writer(make_writer);
     tracing_subscriber::registry()
-        .with(stdout_log.with_filter(LevelFilter::DEBUG))
+        .with(stdout_log.with_filter(LevelFilter::TRACE))
         .init();
 
     info!("logging initialized...");

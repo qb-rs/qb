@@ -61,6 +61,11 @@ void onStart(ServiceInstance service) async {
   final dir = await getApplicationDocumentsDirectory();
   print("directory: $dir");
   final daemon = await DaemonWrapper.init(path: dir.path);
+  await daemon.add(
+    name: "tcp-client",
+    contentType: "application/json",
+    content: utf8.encode('{"addr":"192.168.178.84:6969","auth":[]}'),
+  );
 
   service.on("stop").listen((event) {
     service.stopSelf();
