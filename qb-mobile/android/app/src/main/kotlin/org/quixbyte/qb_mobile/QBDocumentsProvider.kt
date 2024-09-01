@@ -37,9 +37,9 @@ class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler
     private val TAG = "QBDocumentsProvider"
     private val ENGINE_ID = "org.quixbyte.qb_mobile/documents_provider"
     private val CHANNEL_ID = "org.quixbyte.qb_mobile/documents_provider"
-    private val DOCUMENT_ID_PREFIX = "org.quixbyte.qb_mobile/"
+    private val ID_PREFIX = "qb://"
 
-    var DEFAULT_ROOT_PROJECTION = arrayOf(
+    private val DEFAULT_ROOT_PROJECTION = arrayOf(
         Root.COLUMN_ROOT_ID,
         Root.COLUMN_DOCUMENT_ID,
         Root.COLUMN_TITLE,
@@ -47,7 +47,7 @@ class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler
         Root.COLUMN_FLAGS,
         Root.COLUMN_ICON,
     )
-    var DEFAULT_DOCUMENT_PROJECTION = arrayOf(
+    private val DEFAULT_DOCUMENT_PROJECTION = arrayOf(
         Document.COLUMN_DOCUMENT_ID,
         Document.COLUMN_DISPLAY_NAME,
         Document.COLUMN_MIME_TYPE,
@@ -57,7 +57,11 @@ class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler
     )
 
     fun idToFile(id: String): File {
-        return filesDir.resolve(id.substring(DOCUMENT_ID_PREFIX.length))
+        return File(filesDir.path + idToPath(id))
+    }
+
+    fun idToPath(id: String): String {
+        return id.substring(ID_PREFIX.length)
     }
 
     override fun queryRoots(projection: Array<out String?>?): Cursor? {
@@ -67,7 +71,7 @@ class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler
         var cursor = MatrixCursor(projection)
 
         cursor.newRow().apply {
-            add(Root.COLUMN_DOCUMENT_ID, "$DOCUMENT_ID_PREFIX.")
+            add(Root.COLUMN_DOCUMENT_ID, ID_PREFIX)
             add(Root.COLUMN_TITLE, "QuixByte")
             add(Root.COLUMN_SUMMARY, "your files")
             add(
@@ -83,14 +87,10 @@ class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler
     override fun queryDocument(documentId: String?, projection: Array<out String?>?): Cursor? {
         Log.i(TAG, "querying document '$documentId'")
 
-        if (documentId == null) {
-            TODO("unimplemented")
-        }
-
         var projection = projection ?: DEFAULT_DOCUMENT_PROJECTION
         var cursor = MatrixCursor(projection)
 
-        var file = idToFile(documentId)
+        var file = idToFile(documentId!!)
 
         cursor.newRow().apply {
             add(Document.COLUMN_DOCUMENT_ID, documentId)
@@ -133,14 +133,10 @@ class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler
     ): Cursor? {
         Log.i(TAG, "querying documents from parent '$parentDocumentId'")
 
-        if (parentDocumentId == null) {
-            TODO("unimplemented")
-        }
-
         var projection = projection ?: DEFAULT_DOCUMENT_PROJECTION
         var cursor = MatrixCursor(projection)
 
-        var file = idToFile(parentDocumentId)
+        var file = idToFile(parentDocumentId!!)
         for (it in file.listFiles()!!) {
             cursor.newRow().apply {
                 var id = parentDocumentId + "/" + it.name
@@ -173,11 +169,11 @@ class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler
     ): ParcelFileDescriptor? {
         Log.i(TAG, "opening document '$documentId'")
 
-        if (documentId == null || mode == null) {
+        if (mode == null || documentId == null) {
             TODO("unimplemented")
         }
 
-        if(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             return openDocumentProxy(documentId, mode)
         } else {
             return openDocumentProxyPreO(documentId, mode)
@@ -188,7 +184,10 @@ class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler
     private fun openDocumentProxy(documentId: String, mode: String): ParcelFileDescriptor {
         return storageManager.openProxyFileDescriptor(
             ParcelFileDescriptor.parseMode(mode),
-            QBFileCallback(idToFile(documentId), mode),
+            QBFileCallback(idToFile(documentId), mode) {
+                var path = idToPath(documentId)
+                channel.invokeMethod("notify", """{"kind":"write","resource":{"path":"$path","kind":"file"}}""")
+            },
             Handler(Looper.getMainLooper())
         )
     }
@@ -210,16 +209,19 @@ class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler
                 }
                 return pipe[0];
             }
+
             "w" -> {
                 taskManager.runTask {
                     var stream = ParcelFileDescriptor.AutoCloseInputStream(pipe[0])
                     file.writeBytes(stream.readBytes())
                     Log.i(TAG, "write finished")
 
-                    TODO("notify dart")
+                    var path = idToPath(documentId)
+                    channel.invokeMethod("notify", """{"kind":"write","resource":{"path":"$path","kind":"file"}}""")
                 }
                 return pipe[1];
             }
+
             else -> TODO("unimplemented")
         }
     }
@@ -237,7 +239,6 @@ class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler
 
         // get the files directory path
         filesDir = File(PathUtils.getDataDirectory(context)).resolve("files")
-
         storageManager = context.getSystemService(Context.STORAGE_SERVICE) as StorageManager
         taskManager = QBTaskManager()
 
@@ -322,7 +323,7 @@ class QBDocumentsProvider : DocumentsProvider(), MethodChannel.MethodCallHandler
         var executor = engine.dartExecutor
 
         channel = MethodChannel(
-            executor.getBinaryMessenger(), CHANNEL_ID, JSONMethodCodec.INSTANCE
+            executor.getBinaryMessenger(), CHANNEL_ID
         )
         channel.setMethodCallHandler(this)
 

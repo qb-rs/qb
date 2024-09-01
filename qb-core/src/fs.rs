@@ -9,7 +9,7 @@ pub mod wrapper;
 use std::{ffi::OsString, path::Path};
 
 use thiserror::Error;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
 
 use table::QBFileTable;
 use tree::{QBFileTree, TreeFile};
@@ -91,6 +91,7 @@ pub enum QBFSChangeKind {
 }
 
 /// struct describing a text or binary diff of a file
+#[derive(Debug)]
 pub enum QBFileDiff {
     /// binary file
     Binary(Vec<u8>),
@@ -277,6 +278,7 @@ impl QBFS {
         let contents = self.wrapper.read(&path).await?;
         let hash = QBHash::compute(&contents);
 
+        info!("TREE: {} - {}", path.as_ref(), self.tree);
         let file = self
             .tree
             .get_or_insert_mut(&path, TreeFile::default().into())

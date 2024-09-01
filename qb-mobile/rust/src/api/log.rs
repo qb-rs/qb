@@ -1,6 +1,7 @@
 use crate::frb_generated::StreamSink;
 use std::sync::Arc;
 use tracing::{info, level_filters::LevelFilter};
+use tracing_panic::panic_hook;
 use tracing_subscriber::{fmt::MakeWriter, layer::SubscriberExt, util::SubscriberInitExt, Layer};
 
 #[derive(Clone)]
@@ -43,6 +44,7 @@ pub fn init_log(log_sink: StreamSink<Vec<u8>>) {
     tracing_subscriber::registry()
         .with(stdout_log.with_filter(LevelFilter::TRACE))
         .init();
+    std::panic::set_hook(Box::new(panic_hook));
 
     info!("logging initialized...");
 }

@@ -1348,6 +1348,7 @@ dependencies = [
  "qb-proto",
  "rand",
  "serde",
+ "serde_bytes",
  "simdutf8",
  "tokio",
 ]
@@ -1526,6 +1527,7 @@ dependencies = [
  "qb-ext-tcp",
  "qb-proto",
  "serde",
+ "serde_json",
  "tokio",
  "tracing",
  "tracing-panic",

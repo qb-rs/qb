@@ -10,7 +10,7 @@ use std::{
 
 use bitcode::{Decode, Encode};
 use itertools::Itertools;
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::{
     change::QBChange,
@@ -62,7 +62,7 @@ impl QBFileTreeNode {
         if let QBFileTreeNode::File(val) = self {
             return val;
         }
-        panic!("error while unpacking")
+        panic!("error while unpacking: {:?} is not File", self);
     }
 
     /// unwrap file
@@ -71,7 +71,7 @@ impl QBFileTreeNode {
         if let QBFileTreeNode::File(val) = self {
             return val;
         }
-        panic!("error while unpacking")
+        panic!("error while unpacking: {:?} is not File", self);
     }
 
     /// unwrap mutable dir
@@ -80,7 +80,7 @@ impl QBFileTreeNode {
         if let QBFileTreeNode::Dir(val) = self {
             return val;
         }
-        panic!("error while unpacking")
+        panic!("error while unpacking: {:?} is not Dir", self);
     }
 
     /// unwrap dir
@@ -89,7 +89,7 @@ impl QBFileTreeNode {
         if let QBFileTreeNode::Dir(val) = self {
             return val;
         }
-        panic!("error while unpacking")
+        panic!("error while unpacking: {:?} is not Dir", self);
     }
 }
 
@@ -230,6 +230,13 @@ impl QBFileTree {
                 let entry = self.get(from).unwrap().clone();
                 self.insert(resource, entry);
             }
+        }
+    }
+
+    /// Process changes that were applied to the underlying file system
+    pub fn notify_changes<'a>(&mut self, changes: impl Iterator<Item = &'a QBFSChange>) {
+        for change in changes {
+            self.notify_change(change);
         }
     }
 

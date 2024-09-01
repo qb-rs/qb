@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use flutter_rust_bridge::frb;
 use qb_core::fs::wrapper::QBFSWrapper;
 use qb_daemon::{daemon::QBDaemon, master::QBMaster};
-use qb_ext::{control::QBCId, QBExtId};
+use qb_ext::{control::QBCId, interface::QBIHostMessage, QBExtId};
 use qb_ext_tcp::client::QBITCPClientSetup;
 use qb_proto::QBPBlob;
 use tokio::sync::{mpsc, Mutex};
@@ -85,6 +85,30 @@ impl DaemonWrapper {
         self.cancel().await;
         let daemon = &mut self.daemon.lock().await;
         daemon.stop(QBExtId(id)).await.unwrap();
+    }
+
+    /// List the connected extensions.
+    ///
+    /// This will cancel cancelable tasks, which block execution,
+    /// as they require mutable access to the daemon.
+    pub async fn list(&self) -> Vec<(u64, String, String)> {
+        self.cancel().await;
+        let daemon = &mut self.daemon.lock().await;
+        daemon
+            .list()
+            .into_iter()
+            .map(|(a, b, c)| (a.0, b, c))
+            .collect()
+    }
+
+    /// Bridge a message to an interface.
+    pub async fn bridge(&self, id: u64, data: Vec<u8>) {
+        self.cancel().await;
+        let daemon = &mut self.daemon.lock().await;
+        daemon
+            .master
+            .send(&QBExtId(id), QBIHostMessage::Bridge(data))
+            .await;
     }
 
     /// Cancel cancelable tasks.

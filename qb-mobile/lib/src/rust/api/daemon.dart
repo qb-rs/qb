@@ -19,12 +19,21 @@ abstract class DaemonWrapper implements RustOpaqueInterface {
       required String contentType,
       required List<int> content});
 
+  /// Bridge a message to an interface.
+  Future<void> bridge({required BigInt id, required List<int> data});
+
   /// Cancel cancelable tasks.
   Future<void> cancel();
 
   /// Initialize a new daemon process.
   static Future<DaemonWrapper> init({required String path}) =>
       RustLib.instance.api.crateApiDaemonDaemonWrapperInit(path: path);
+
+  /// List the connected extensions.
+  ///
+  /// This will cancel cancelable tasks, which block execution,
+  /// as they require mutable access to the daemon.
+  Future<List<(BigInt, String, String)>> list();
 
   /// Process the daemon.
   ///

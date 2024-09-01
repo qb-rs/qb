@@ -57,7 +57,7 @@ impl Runner {
                             info!("stopping...");
                             break;
                         }
-                        _ => unimplemented!(),
+                        _ => unimplemented!("unknown message: {msg:?}"),
                     }
                 }
             }

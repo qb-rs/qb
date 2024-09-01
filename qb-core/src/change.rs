@@ -133,7 +133,7 @@ impl QBChangeMap {
     }
 
     /// Append another changemap to this map.
-    pub fn append(&mut self, other: Self) {
+    pub fn append_map(&mut self, other: Self) {
         if other.head > self.head {
             self.head = other.head;
         }
@@ -141,6 +141,13 @@ impl QBChangeMap {
             let entries = self.entries(resource);
             entries.append(&mut other_entries);
             Self::_sort(entries);
+        }
+    }
+
+    /// Append entries to this map.
+    pub fn append(&mut self, entries: Vec<(QBResource, QBChange)>) {
+        for entry in entries {
+            self.push(entry);
         }
     }
 
@@ -173,7 +180,7 @@ impl QBChangeMap {
     }
 
     /// Push an entry.
-    pub fn push(&mut self, resource: QBResource, change: QBChange) {
+    pub fn push(&mut self, (resource, change): (QBResource, QBChange)) {
         let new_change = self.register(&change);
         let entries = self.entries(resource);
         entries.push(change);

@@ -202,6 +202,7 @@ impl QBPath {
     /// Convert into string
     #[inline]
     pub fn to_string(&self, root: &str) -> String {
+        assert!(!root.ends_with('/'));
         let path = &self.0;
         format!("{root}{path}")
     }
@@ -269,6 +270,7 @@ pub struct QBResource {
 #[derive(
     Encode, Decode, Serialize, Deserialize, Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash,
 )]
+#[serde(rename_all = "lowercase")]
 pub enum QBResourceKind {
     /// a file
     File,

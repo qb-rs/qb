@@ -96,7 +96,7 @@ impl Runner {
                 // Apply changes
                 let mut changemap = local.clone();
                 let changes = changemap.merge(remote).unwrap();
-                self.fs.changemap.append(changemap);
+                self.fs.changemap.append_map(changemap);
                 let fschanges = self.fs.to_fschanges(changes);
                 self.watcher_skip.append(
                     &mut fschanges
@@ -171,15 +171,24 @@ impl Runner {
             return;
         }
 
-        let change = match event.kind {
+        let entries = match event.kind {
             EventKind::Modify(ModifyKind::Data(_)) => {
                 let kind = self.fs.diff(&resource).await.unwrap();
                 match kind {
                     Some(QBFileDiff::Text(diff)) => {
-                        QBChange::new(self.recorder.record(), QBChangeKind::UpdateText(diff))
+                        vec![(
+                            resource,
+                            QBChange::new(self.recorder.record(), QBChangeKind::UpdateText(diff)),
+                        )]
                     }
                     Some(QBFileDiff::Binary(contents)) => {
-                        QBChange::new(self.recorder.record(), QBChangeKind::UpdateBinary(contents))
+                        vec![(
+                            resource,
+                            QBChange::new(
+                                self.recorder.record(),
+                                QBChangeKind::UpdateBinary(contents),
+                            ),
+                        )]
                     }
                     None => return,
                 }
@@ -187,21 +196,31 @@ impl Runner {
             EventKind::Modify(ModifyKind::Name(RenameMode::To)) => {
                 let ts = self.recorder.record();
                 let previouspath = self.trackers.remove(&event.tracker().unwrap()).unwrap();
-                self.fs.changemap.push(
-                    QBResource::new(previouspath, resource.kind.clone()),
-                    QBChange::new(ts.clone(), QBChangeKind::RenameFrom),
-                );
-                QBChange::new(ts, QBChangeKind::RenameTo)
+                vec![
+                    (
+                        QBResource::new(previouspath, resource.kind.clone()),
+                        QBChange::new(ts.clone(), QBChangeKind::RenameFrom),
+                    ),
+                    (resource, QBChange::new(ts, QBChangeKind::RenameTo)),
+                ]
             }
             EventKind::Remove(..) => {
                 info!("DELETE {}", resource);
-                QBChange::new(self.recorder.record(), QBChangeKind::Delete)
+                vec![(
+                    resource,
+                    QBChange::new(self.recorder.record(), QBChangeKind::Delete),
+                )]
             }
-            EventKind::Create(..) => QBChange::new(self.recorder.record(), QBChangeKind::Create),
+            EventKind::Create(..) => vec![(
+                resource,
+                QBChange::new(self.recorder.record(), QBChangeKind::Create),
+            )],
             _ => panic!("this should not happen"),
         };
 
-        self.fs.changemap.push(resource, change);
+        let fschanges = self.fs.to_fschanges(entries.clone());
+        self.fs.tree.notify_changes(fschanges.iter());
+        self.fs.changemap.append(entries);
     }
 
     fn should_sync(&mut self) -> bool {
@@ -247,7 +266,7 @@ impl Runner {
                             info!("stopping...");
                             break
                         }
-                        _ => unimplemented!(),
+                        _ => unimplemented!("unknown message: {msg:?}"),
                     }
                 },
                 Some(Ok(event)) = watcher_rx.recv() => {

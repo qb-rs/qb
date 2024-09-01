@@ -67,7 +67,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.3.0';
 
   @override
-  int get rustContentHash => 2081444312;
+  int get rustContentHash => -1063182496;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -84,9 +84,17 @@ abstract class RustLibApi extends BaseApi {
       required String contentType,
       required List<int> content});
 
+  Future<void> crateApiDaemonDaemonWrapperBridge(
+      {required DaemonWrapper that,
+      required BigInt id,
+      required List<int> data});
+
   Future<void> crateApiDaemonDaemonWrapperCancel({required DaemonWrapper that});
 
   Future<DaemonWrapper> crateApiDaemonDaemonWrapperInit({required String path});
+
+  Future<List<(BigInt, String, String)>> crateApiDaemonDaemonWrapperList(
+      {required DaemonWrapper that});
 
   Future<void> crateApiDaemonDaemonWrapperProcess(
       {required DaemonWrapper that});
@@ -154,6 +162,37 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<void> crateApiDaemonDaemonWrapperBridge(
+      {required DaemonWrapper that,
+      required BigInt id,
+      required List<int> data}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDaemonWrapper(
+            that, serializer);
+        sse_encode_u_64(id, serializer);
+        sse_encode_list_prim_u_8_loose(data, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 2, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_unit,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateApiDaemonDaemonWrapperBridgeConstMeta,
+      argValues: [that, id, data],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDaemonDaemonWrapperBridgeConstMeta =>
+      const TaskConstMeta(
+        debugName: "DaemonWrapper_bridge",
+        argNames: ["that", "id", "data"],
+      );
+
+  @override
   Future<void> crateApiDaemonDaemonWrapperCancel(
       {required DaemonWrapper that}) {
     return handler.executeNormal(NormalTask(
@@ -162,7 +201,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDaemonWrapper(
             that, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 2, port: port_);
+            funcId: 3, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -188,7 +227,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_String(path, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 3, port: port_);
+            funcId: 4, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData:
@@ -208,6 +247,33 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       );
 
   @override
+  Future<List<(BigInt, String, String)>> crateApiDaemonDaemonWrapperList(
+      {required DaemonWrapper that}) {
+    return handler.executeNormal(NormalTask(
+      callFfi: (port_) {
+        final serializer = SseSerializer(generalizedFrbRustBinding);
+        sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDaemonWrapper(
+            that, serializer);
+        pdeCallFfi(generalizedFrbRustBinding, serializer,
+            funcId: 5, port: port_);
+      },
+      codec: SseCodec(
+        decodeSuccessData: sse_decode_list_record_u_64_string_string,
+        decodeErrorData: null,
+      ),
+      constMeta: kCrateApiDaemonDaemonWrapperListConstMeta,
+      argValues: [that],
+      apiImpl: this,
+    ));
+  }
+
+  TaskConstMeta get kCrateApiDaemonDaemonWrapperListConstMeta =>
+      const TaskConstMeta(
+        debugName: "DaemonWrapper_list",
+        argNames: ["that"],
+      );
+
+  @override
   Future<void> crateApiDaemonDaemonWrapperProcess(
       {required DaemonWrapper that}) {
     return handler.executeNormal(NormalTask(
@@ -216,7 +282,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         sse_encode_Auto_Ref_RustOpaque_flutter_rust_bridgefor_generatedRustAutoOpaqueInnerDaemonWrapper(
             that, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 4, port: port_);
+            funcId: 6, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -244,7 +310,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that, serializer);
         sse_encode_u_64(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 5, port: port_);
+            funcId: 7, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -272,7 +338,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that, serializer);
         sse_encode_u_64(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 6, port: port_);
+            funcId: 8, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -300,7 +366,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
             that, serializer);
         sse_encode_u_64(id, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 7, port: port_);
+            funcId: 9, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -326,7 +392,7 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
         final serializer = SseSerializer(generalizedFrbRustBinding);
         sse_encode_StreamSink_list_prim_u_8_strict_Sse(logSink, serializer);
         pdeCallFfi(generalizedFrbRustBinding, serializer,
-            funcId: 8, port: port_);
+            funcId: 10, port: port_);
       },
       codec: SseCodec(
         decodeSuccessData: sse_decode_unit,
@@ -405,6 +471,29 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as Uint8List;
+  }
+
+  @protected
+  List<(BigInt, String, String)> dco_decode_list_record_u_64_string_string(
+      dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>)
+        .map(dco_decode_record_u_64_string_string)
+        .toList();
+  }
+
+  @protected
+  (BigInt, String, String) dco_decode_record_u_64_string_string(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3) {
+      throw Exception('Expected 3 elements, got ${arr.length}');
+    }
+    return (
+      dco_decode_u_64(arr[0]),
+      dco_decode_String(arr[1]),
+      dco_decode_String(arr[2]),
+    );
   }
 
   @protected
@@ -491,6 +580,29 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var len_ = sse_decode_i_32(deserializer);
     return deserializer.buffer.getUint8List(len_);
+  }
+
+  @protected
+  List<(BigInt, String, String)> sse_decode_list_record_u_64_string_string(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <(BigInt, String, String)>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_record_u_64_string_string(deserializer));
+    }
+    return ans_;
+  }
+
+  @protected
+  (BigInt, String, String) sse_decode_record_u_64_string_string(
+      SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_field0 = sse_decode_u_64(deserializer);
+    var var_field1 = sse_decode_String(deserializer);
+    var var_field2 = sse_decode_String(deserializer);
+    return (var_field0, var_field1, var_field2);
   }
 
   @protected
@@ -602,6 +714,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_list_record_u_64_string_string(
+      List<(BigInt, String, String)> self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_record_u_64_string_string(item, serializer);
+    }
+  }
+
+  @protected
+  void sse_encode_record_u_64_string_string(
+      (BigInt, String, String) self, SseSerializer serializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.$1, serializer);
+    sse_encode_String(self.$2, serializer);
+    sse_encode_String(self.$3, serializer);
+  }
+
+  @protected
   void sse_encode_u_64(BigInt self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     serializer.buffer.putBigUint64(self);
@@ -667,9 +798,23 @@ class DaemonWrapperImpl extends RustOpaque implements DaemonWrapper {
       RustLib.instance.api.crateApiDaemonDaemonWrapperAdd(
           that: this, name: name, contentType: contentType, content: content);
 
+  /// Bridge a message to an interface.
+  Future<void> bridge({required BigInt id, required List<int> data}) =>
+      RustLib.instance.api
+          .crateApiDaemonDaemonWrapperBridge(that: this, id: id, data: data);
+
   /// Cancel cancelable tasks.
   Future<void> cancel() =>
       RustLib.instance.api.crateApiDaemonDaemonWrapperCancel(
+        that: this,
+      );
+
+  /// List the connected extensions.
+  ///
+  /// This will cancel cancelable tasks, which block execution,
+  /// as they require mutable access to the daemon.
+  Future<List<(BigInt, String, String)>> list() =>
+      RustLib.instance.api.crateApiDaemonDaemonWrapperList(
         that: this,
       );
 

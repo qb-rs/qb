@@ -113,6 +113,8 @@ pub enum QBISlaveMessage {
 pub enum QBIHostMessage {
     /// message
     Message(QBIMessage),
+    /// bridge message
+    Bridge(#[serde(with = "serde_bytes")] Vec<u8>),
     /// stop the interface
     Stop,
 }

@@ -40,6 +40,7 @@ impl QBCId {
         Self(rng.gen::<u64>())
     }
 
+    /// The root control handle.
     pub fn root() -> Self {
         Self(0)
     }
@@ -57,6 +58,8 @@ impl QBCId {
         Ok(Self(u64::from_be_bytes(id_bytes)))
     }
 
+    /// Returns whether this control handle is the root (useful, when the
+    /// daemon is embedded inside an application and can only have one).
     pub fn is_root(&self) -> bool {
         self.0 == 0
     }

@@ -227,7 +227,7 @@ impl QBMaster {
                 // Apply changes to changelog
                 let mut changemap = local.clone();
                 _ = changemap.merge(remote).unwrap();
-                self.changemap.append(changemap);
+                self.changemap.append_map(changemap);
 
                 // find the new common hash
                 let new_common = self.changemap.head().clone();
